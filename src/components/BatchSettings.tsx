@@ -9,7 +9,8 @@ import {
   Gauge, 
   ChevronDown,
   Video,
-  Zap
+  Zap,
+  Sparkles
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 
@@ -67,6 +68,72 @@ export const BatchSettingsForm: React.FC = () => {
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-emerald-400 absolute right-2.5 top-2.5 pointer-events-none" />
         </div>
+      </div>
+
+      {/* AI Engine Mode Selector (Native CapCut Pro / Hybrid / Cloud Local) */}
+      <div className="bg-[#0e141e] p-2 rounded-lg border border-[#253347] flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            Nguồn xử lý AI (AI Engine Mode):
+          </label>
+          {settings.aiEngineMode === 'CAPCUT_PRO_NATIVE' && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/80 text-purple-300 border border-purple-400/30">
+              VIP CapCut Pro (0đ API)
+            </span>
+          )}
+        </div>
+        <div className="relative">
+          <select
+            value={settings.aiEngineMode || 'CAPCUT_PRO_NATIVE'}
+            onChange={(e) => updateSettings({ aiEngineMode: e.target.value as any })}
+            className="w-full bg-[#151d2a] border border-[#2e405a] rounded-md px-2.5 py-1.5 text-xs text-purple-300 font-semibold focus:outline-none focus:border-purple-500 appearance-none cursor-pointer"
+          >
+            <option value="CAPCUT_PRO_NATIVE">
+              👑 Native CapCut Pro (Dùng 100% Tách Sub, Dịch & Giọng VIP CapCut Pro)
+            </option>
+            <option value="HYBRID_PRO">
+              ⚡ Hybrid Pro (Dịch ngữ cảnh bằng Gemini + Đọc bằng Giọng VIP CapCut Pro)
+            </option>
+            <option value="CLOUD_LOCAL">
+              ☁️ Cloud/Local AI Pipeline (Whisper + Gemini + Edge-TTS ngầm)
+            </option>
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 text-purple-400 absolute right-2.5 top-2.5 pointer-events-none" />
+        </div>
+
+        {/* CapCut VIP Voice Configuration for Pro Modes */}
+        {settings.aiEngineMode !== 'CLOUD_LOCAL' && (
+          <div className="pt-1.5 border-t border-[#1e2a3c] grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-0.5 font-medium">Giọng VIP CapCut Pro:</label>
+              <select
+                value={settings.capcutVipVoice || 'Cô Gái Hoạt Ngôn'}
+                onChange={(e) => updateSettings({ capcutVipVoice: e.target.value })}
+                className="w-full bg-[#111722] border border-[#233145] rounded px-2 py-1 text-[11px] text-amber-300 font-semibold focus:outline-none"
+              >
+                <option value="Cô Gái Hoạt Ngôn">Cô Gái Hoạt Ngôn (Nữ VIP)</option>
+                <option value="Nam Trầm Ấm">Nam Trầm Ấm (Nam VIP)</option>
+                <option value="Thanh Niên Tự Tin">Thanh Niên Tự Tin (Nam Trẻ)</option>
+                <option value="Review Phim Hài">Review Phim Hài (Kể Chuyện)</option>
+                <option value="Chị Google">Chị Google (Truyền Thống)</option>
+                <option value="Nữ MC Tin Tức">Nữ MC Tin Tức (Trang Trọng)</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 pt-3">
+              <input
+                type="checkbox"
+                id="syncSpeed"
+                checked={settings.capcutSyncSpeed !== false}
+                onChange={(e) => updateSettings({ capcutSyncSpeed: e.target.checked })}
+                className="rounded border-[#26354a] bg-[#0f141c] text-emerald-500 focus:ring-0 cursor-pointer"
+              />
+              <label htmlFor="syncSpeed" className="text-[11px] text-slate-300 cursor-pointer select-none">
+                Đồng bộ tốc độ đọc với Sub
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2">

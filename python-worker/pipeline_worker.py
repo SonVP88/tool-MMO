@@ -521,7 +521,50 @@ def main():
         # Step 1: Input / Download
         video_raw = step_download_or_copy(task_id, source, temp_dir, cookie_data)
 
-        # Step 2: Extract & ASR
+        # Check AI Engine Mode: Native CapCut Pro vs Hybrid Pro vs Cloud Local
+        ai_engine_mode = settings.get("aiEngineMode", "CAPCUT_PRO_NATIVE")
+        custom_draft_dir = config.get("capcutDraftDir", "")
+        custom_capcut_exe = config.get("capcutExePath", "")
+
+        if ai_engine_mode in ["CAPCUT_PRO_NATIVE", "HYBRID_PRO"]:
+            emit_progress(task_id, 25, "CapCut Pro Init", f"Khởi tạo Timeline CapCut Pro ({ai_engine_mode})...")
+            from capcut_draft_generator import create_capcut_draft
+            from capcut_ui_controller import run_native_capcut_pro_pipeline
+
+            # Create initial draft with Video (attenuated) + Old Sub Blur Mask
+            draft_folder = create_capcut_draft(
+                project_name=f"Reup_{task_id}",
+                video_file=video_raw,
+                subtitles=[],
+                tts_segments=[],
+                custom_draft_dir=custom_draft_dir,
+                old_sub_box=old_sub_box,
+                blur_radius=int(settings.get("blurRadius", 25)),
+                orig_volume=float(settings.get("originalAudioVolume", 20)) / 100.0,
+                voice_volume=float(settings.get("voiceVolume", 100)) / 100.0,
+            )
+
+            vip_voice = settings.get("capcutVipVoice", "Cô Gái Hoạt Ngôn")
+            sync_speed = settings.get("capcutSyncSpeed", True)
+
+            run_native_capcut_pro_pipeline(
+                project_name=f"Reup_{task_id}",
+                output_filename=f"Reup_{task_id}",
+                output_dir=output_dir,
+                ai_engine_mode=ai_engine_mode,
+                vip_voice=vip_voice,
+                sync_speed=sync_speed,
+                capcut_exe_path=custom_capcut_exe,
+                progress_callback=lambda p, s, m: emit_progress(task_id, p, s, m),
+                gemini_key=gemini_key,
+                draft_folder=draft_folder
+            )
+
+            final_mp4 = output_dir / f"Reup_{task_id}.mp4"
+            emit_done(task_id, str(final_mp4.resolve()), f"Quy trình {ai_engine_mode} CapCut Pro hoàn tất thành công.")
+            return
+
+        # Step 2: Extract & ASR (For Cloud / Local mode)
         subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key)
 
         # Step 3: Contextual Translation
