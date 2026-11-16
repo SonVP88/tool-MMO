@@ -45,3 +45,29 @@ export interface BatchSettings {
   textColor: string;
   strokeColor: string;
 }
+
+export interface StudioProfile {
+  name: string;
+  settings: BatchSettings;
+  updated_at: string;
+}
+
+export interface TaskProgressEvent {
+  task_id: number;
+  stage: string;
+  progress: number;
+  status: string;
+  note: string;
+  output_path: string;
+  global_processed: number;
+  global_total: number;
+  global_percent: number;
+  estimated_time: string;
+}
+
+export interface LiveLogEvent {
+  id: string;
+  timestamp: string;
+  message: string;
+  log_type: string;
+}

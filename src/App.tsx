@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Header } from './components/Header';
 import { ControlPanel } from './components/ControlPanel';
 import { TaskGrid } from './components/TaskGrid';
@@ -9,8 +9,15 @@ import { Footer } from './components/Footer';
 import { AddVideoModal } from './components/AddVideoModal';
 import { CookieModal } from './components/CookieModal';
 import { TranslationModal } from './components/TranslationModal';
+import { useStudioStore } from './store/useStudioStore';
 
 export const App: React.FC = () => {
+  const { initApp } = useStudioStore();
+
+  useEffect(() => {
+    initApp();
+  }, [initApp]);
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0f141c] text-slate-200 overflow-hidden font-sans">
       {/* 1. Top Header & Navigation */}

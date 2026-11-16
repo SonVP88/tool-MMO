@@ -22,7 +22,8 @@ export const TaskGrid: React.FC = () => {
     deleteTask,
     currentVideoId,
     setCurrentVideoId,
-    addLog,
+    openFolder,
+    openVideoFile,
   } = useStudioStore();
 
   // Counts for tabs
@@ -219,7 +220,12 @@ export const TaskGrid: React.FC = () => {
                       {/* View / Select preview */}
                       <button
                         title="Xem trước video này"
-                        onClick={() => setCurrentVideoId(task.id)}
+                        onClick={() => {
+                          setCurrentVideoId(task.id);
+                          if (task.outputPath) {
+                            openVideoFile(task.outputPath);
+                          }
+                        }}
                         className={`p-1 rounded hover:bg-emerald-600/30 text-emerald-400 ${
                           isCurrent ? 'bg-emerald-600/30 ring-1 ring-emerald-400' : ''
                         }`}
@@ -230,7 +236,7 @@ export const TaskGrid: React.FC = () => {
                       {/* Open output */}
                       <button
                         title="Mở thư mục chứa file"
-                        onClick={() => addLog(`Mở file: ${task.outputPath}`, 'info')}
+                        onClick={() => openFolder()}
                         className="p-1 rounded hover:bg-sky-600/30 text-sky-400"
                       >
                         <Folder className="w-3.5 h-3.5" />

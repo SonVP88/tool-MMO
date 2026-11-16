@@ -32,10 +32,11 @@ export const ControlPanel: React.FC = () => {
     setAddVideoModalOpen,
     setCookieModalOpen,
     addLog,
+    openFolder,
   } = useStudioStore();
 
   const handleOpenExportFolder = () => {
-    addLog('Đang mở thư mục xuất: C:\\Output\\Reup...', 'info');
+    openFolder();
   };
 
   const handleViewLog = () => {
@@ -210,3 +211,4 @@ export const ControlPanel: React.FC = () => {
     </div>
   );
 };
+

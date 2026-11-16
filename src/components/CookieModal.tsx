@@ -3,14 +3,13 @@ import { X, KeyRound, Check, ShieldCheck } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 
 export const CookieModal: React.FC = () => {
-  const { isCookieModalOpen, setCookieModalOpen, addLog } = useStudioStore();
-  const [cookieValue, setCookieValue] = useState(
-    'odin_tt=1a2b3c...; sessionid_ss=8f9a0...; passport_csrf_token=...'
-  );
+  const { isCookieModalOpen, setCookieModalOpen, douyinCookie, setDouyinCookie, addLog } = useStudioStore();
+  const [cookieValue, setCookieValue] = useState(douyinCookie);
 
   if (!isCookieModalOpen) return null;
 
   const handleSaveCookie = () => {
+    setDouyinCookie(cookieValue);
     addLog('Đã lưu cấu hình Cookie Douyin thành công.', 'success');
     setCookieModalOpen(false);
   };
@@ -71,3 +70,4 @@ export const CookieModal: React.FC = () => {
     </div>
   );
 };
+

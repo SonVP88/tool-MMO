@@ -3,13 +3,13 @@ import { X, Link2, FolderPlus, Film, Plus } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 
 export const AddVideoModal: React.FC = () => {
-  const { isAddVideoModalOpen, setAddVideoModalOpen, addTask, addLog } = useStudioStore();
+  const { isAddVideoModalOpen, setAddVideoModalOpen, addBatchTasks, addLog } = useStudioStore();
   const [linksText, setLinksText] = useState('');
   const [activeTab, setActiveTab] = useState<'link' | 'local'>('link');
 
   if (!isAddVideoModalOpen) return null;
 
-  const handleAddLinks = () => {
+  const handleAddLinks = async () => {
     const lines = linksText
       .split('\n')
       .map((l) => l.trim())
@@ -20,25 +20,16 @@ export const AddVideoModal: React.FC = () => {
       return;
     }
 
-    lines.forEach((line) => {
-      // Extract short name from URL or text
-      let name = line;
-      try {
-        const url = new URL(line);
-        name = url.pathname.split('/').filter(Boolean).pop() || 'Video_Link';
-      } catch {
-        name = line;
-      }
-      addTask(name);
-    });
-
+    await addBatchTasks(lines);
     setLinksText('');
     setAddVideoModalOpen(false);
   };
 
-  const handleMockAddLocal = () => {
-    addTask('Episode_22_HD', 'C:\\Videos\\Douyin\\Episode_22_HD.mp4');
-    addTask('Episode_23_HD', 'C:\\Videos\\Douyin\\Episode_23_HD.mp4');
+  const handleMockAddLocal = async () => {
+    await addBatchTasks([
+      'C:\\Videos\\Douyin\\Episode_22_HD.mp4',
+      'C:\\Videos\\Douyin\\Episode_23_HD.mp4'
+    ]);
     setAddVideoModalOpen(false);
   };
 
@@ -143,3 +134,4 @@ export const AddVideoModal: React.FC = () => {
     </div>
   );
 };
+

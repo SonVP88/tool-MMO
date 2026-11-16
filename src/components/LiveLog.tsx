@@ -59,3 +59,4 @@ export const LiveLog: React.FC = () => {
     </div>
   );
 };
+

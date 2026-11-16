@@ -3,9 +3,17 @@ import { X, Sparkles, Check, Key } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 
 export const TranslationModal: React.FC = () => {
-  const { isTranslationConfigOpen, setTranslationConfigOpen, addLog } = useStudioStore();
-  const [apiKey, setApiKey] = useState('AIzaSyD-mock-gemini-pro-key-auto');
-  const [groqKey, setGroqKey] = useState('gsk_mock_whisper_groq_fast_key');
+  const { 
+    isTranslationConfigOpen, 
+    setTranslationConfigOpen, 
+    geminiApiKey,
+    setGeminiApiKey,
+    groqApiKey,
+    setGroqApiKey,
+    addLog 
+  } = useStudioStore();
+  const [apiKey, setApiKey] = useState(geminiApiKey);
+  const [groqKey, setGroqKey] = useState(groqApiKey);
   const [prompt, setPrompt] = useState(
     'Dịch phụ đề tiếng Trung sang tiếng Việt mượt mà, văn phong lôi cuốn phù hợp thể loại review phim / anime, xưng hô chuẩn bối cảnh.'
   );
@@ -13,6 +21,8 @@ export const TranslationModal: React.FC = () => {
   if (!isTranslationConfigOpen) return null;
 
   const handleSave = () => {
+    setGeminiApiKey(apiKey);
+    setGroqApiKey(groqKey);
     addLog('Đã cập nhật khóa API và cấu hình dịch thuật AI.', 'success');
     setTranslationConfigOpen(false);
   };
@@ -95,3 +105,4 @@ export const TranslationModal: React.FC = () => {
     </div>
   );
 };
+
