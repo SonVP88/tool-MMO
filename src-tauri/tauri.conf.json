@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "tiem-bun-mmo",
-  "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "productName": "AutomationStudioPro",
+  "version": "2.2.1",
+  "identifier": "com.automationstudio.mmo",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "Tiem Bun MMO -- Voice Studio -- [rtt19092004 | USER]",
+        "title": "AUTOMATION STUDIO - TỰ ĐỘNG HÓA SẢN XUẤT HÀNG LOẠT",
         "width": 1360,
-        "height": 860,
+        "height": 840,
         "minWidth": 1200,
         "minHeight": 750,
         "resizable": true,
@@ -28,6 +28,15 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "copyright": "Copyright © 2026 Automation Studio MMO Pro",
+    "category": "Video",
+    "shortDescription": "Batch Video Dubbing & Reup Automation Studio",
+    "externalBin": [
+      "bin/pipeline_worker"
+    ],
+    "resources": [
+      "bin/*"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

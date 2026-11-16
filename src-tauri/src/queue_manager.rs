@@ -425,16 +425,47 @@ async fn process_single_task(
     };
     let _ = app.emit("live-log", start_log);
 
-    // Call python worker
-    let worker_script = "./python-worker/pipeline_worker.py";
-    let mut cmd = Command::new("python");
-    cmd.arg(worker_script)
-        .arg("--task-id").arg(format!("{}", task_id))
-        .arg("--source").arg(&task.source)
-        .arg("--output-dir").arg(&settings.output_dir)
-        .arg("--config").arg(&config_json)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // Check for standalone sidecar binary or fallback to python
+    let sidecar_candidates = [
+        "./src-tauri/bin/pipeline_worker-x86_64-pc-windows-msvc.exe",
+        "./bin/pipeline_worker.exe",
+        "./bin/pipeline_worker-x86_64-pc-windows-msvc.exe",
+        "./pipeline_worker.exe",
+    ];
+
+    let mut sidecar_path: Option<&str> = None;
+    for c in &sidecar_candidates {
+        if std::path::Path::new(c).exists() {
+            sidecar_path = Some(c);
+            break;
+        }
+    }
+
+    let mut cmd = if let Some(bin) = sidecar_path {
+        let mut c = Command::new(bin);
+        c.arg("--task-id").arg(format!("{}", task_id))
+            .arg("--source").arg(&task.source)
+            .arg("--output-dir").arg(&settings.output_dir)
+            .arg("--config").arg(&config_json);
+        c
+    } else {
+        let worker_script = "./python-worker/pipeline_worker.py";
+        let mut c = Command::new("python");
+        c.arg(worker_script)
+            .arg("--task-id").arg(format!("{}", task_id))
+            .arg("--source").arg(&task.source)
+            .arg("--output-dir").arg(&settings.output_dir)
+            .arg("--config").arg(&config_json);
+        c
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        // CREATE_NO_WINDOW = 0x08000000 to hide console window completely
+        cmd.creation_flags(0x08000000);
+    }
+
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     match cmd.spawn() {
         Ok(mut child) => {

@@ -78,6 +78,7 @@ interface StudioState {
   isTranslationConfigOpen: boolean;
   isCapCutConfigOpen: boolean;
   isCharacterModalOpen: boolean;
+  isDependencyDoctorOpen: boolean;
 
   // Characters & Multi-Speaker Mapping
   characters: CharacterMapping[];
@@ -120,6 +121,7 @@ interface StudioState {
   setTranslationConfigOpen: (open: boolean) => void;
   setCapCutConfigOpen: (open: boolean) => void;
   setCharacterModalOpen: (open: boolean) => void;
+  setDependencyDoctorOpen: (open: boolean) => void;
   setCharacters: (chars: CharacterMapping[]) => void;
   triggerAutoSave: () => Promise<void>;
 }
@@ -141,6 +143,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   isTranslationConfigOpen: false,
   isCapCutConfigOpen: false,
   isCharacterModalOpen: false,
+  isDependencyDoctorOpen: false,
 
   characters: [
     {
@@ -661,5 +664,6 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setTranslationConfigOpen: (open) => set({ isTranslationConfigOpen: open }),
   setCapCutConfigOpen: (open) => set({ isCapCutConfigOpen: open }),
   setCharacterModalOpen: (open) => set({ isCharacterModalOpen: open }),
+  setDependencyDoctorOpen: (open) => set({ isDependencyDoctorOpen: open }),
   setCharacters: (chars) => set({ characters: chars }),
 }));

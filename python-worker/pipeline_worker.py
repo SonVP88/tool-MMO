@@ -84,6 +84,27 @@ def get_ffmpeg_path():
             return c
     return "ffmpeg"
 
+def detect_gpu_encoder(ffmpeg_exe: str):
+    """
+    Probes available hardware encoders (NVENC, AMF, QSV, libx264).
+    Returns (encoder_name, encoder_flags, display_label)
+    """
+    candidates = [
+        ("h264_nvenc", ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23"], "GPU: NVIDIA NVENC Active"),
+        ("h264_amf", ["-c:v", "h264_amf", "-quality", "speed"], "GPU: AMD AMF Active"),
+        ("h264_qsv", ["-c:v", "h264_qsv", "-preset", "fast"], "GPU: Intel QSV Active"),
+        ("libx264", ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"], "CPU Mode (libx264)"),
+    ]
+    for enc, flags, label in candidates:
+        cmd = [ffmpeg_exe, "-y", "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.05"] + flags + ["-f", "null", "-"]
+        try:
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if res.returncode == 0:
+                return enc, flags, label
+        except Exception:
+            continue
+    return "libx264", ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"], "CPU Mode (libx264)"
+
 def hex_to_ass_color(hex_str: str, default: str = "&H00FFFFFF&") -> str:
     """Converts #RRGGBB to ASS color &H00BBGGRR&"""
     hex_str = hex_str.strip().lstrip('#')
@@ -433,6 +454,9 @@ def step_render_video(
         f"[1:a]volume={voice_vol}[aout]"
     )
 
+    enc_name, enc_flags, enc_label = detect_gpu_encoder(ffmpeg_exe)
+    emit_progress(task_id, 90, "Render video", f"Tăng tốc phần cứng FFmpeg: {enc_label}")
+
     cmd = [
         ffmpeg_exe, "-y",
         "-i", str(raw_video),
@@ -440,14 +464,14 @@ def step_render_video(
         "-filter_complex", filter_complex,
         "-map", "[vout]",
         "-map", "[aout]",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+    ] + enc_flags + [
         "-c:a", "aac",
         str(final_output)
     ]
 
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if not final_output.exists() or final_output.stat().st_size == 0:
-        # Simplified fallback without subtitles filter if fonts missing
+        # Fallback to libx264 if hardware encoder failed
         cmd_fallback = [
             ffmpeg_exe, "-y",
             "-i", str(raw_video),
@@ -460,10 +484,7 @@ def step_render_video(
         ]
         subprocess.run(cmd_fallback, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    emit_progress(task_id, 98, "Render video", f"Tạo file thành công: {final_output.name}")
-    return final_output
-
-    emit_progress(task_id, 98, "Render video", f"Tạo file thành công: {final_output.name}")
+    emit_progress(task_id, 98, "Render video", f"Tạo file thành công ({enc_name}): {final_output.name}")
     return final_output
 
 # ==================== MAIN DISPATCHER ====================

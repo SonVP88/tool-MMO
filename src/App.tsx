@@ -11,6 +11,7 @@ import { CookieModal } from './components/CookieModal';
 import { TranslationModal } from './components/TranslationModal';
 import { CapCutModal } from './components/CapCutModal';
 import { CharacterSyncModal } from './components/CharacterSyncModal';
+import { DependencyDoctorModal } from './components/DependencyDoctorModal';
 import { VoiceStudioTab } from './components/VoiceStudioTab';
 import { ReupStudioTab } from './components/ReupStudioTab';
 import { ChannelManagerTab } from './components/ChannelManagerTab';
@@ -77,6 +78,7 @@ export const App: React.FC = () => {
       <TranslationModal />
       <CapCutModal />
       <CharacterSyncModal />
+      <DependencyDoctorModal />
     </div>
   );
 };
