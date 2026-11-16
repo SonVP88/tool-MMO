@@ -121,3 +121,4 @@ export const CapCutModal: React.FC = () => {
     </div>
   );
 };
+

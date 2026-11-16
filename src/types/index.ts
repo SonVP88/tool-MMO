@@ -74,3 +74,46 @@ export interface LiveLogEvent {
   message: string;
   log_type: string;
 }
+
+export interface CharacterMapping {
+  id: string;
+  originalName: string;
+  translatedName: string;
+  pronoun: string;
+  voice: string;
+}
+
+export interface SubtitleLine {
+  index: number;
+  start: string;
+  end: string;
+  originalText: string;
+  translatedText: string;
+  speaker: string;
+  isPlaying?: boolean;
+}
+
+export interface AntiCopyrightSettings {
+  flipHorizontal: boolean;
+  cropZoom: number; // 100 - 115%
+  brightness: number; // -20 to 20
+  contrast: number; // 0.8 to 1.2
+  saturation: number; // 0.8 to 1.3
+  noiseOverlay: number; // 0 - 5%
+  watermarkPath: string;
+  introPath: string;
+  outroPath: string;
+  stripMetadata: boolean;
+  randomizeMd5: boolean;
+}
+
+export interface ChannelItem {
+  id: string;
+  name: string;
+  platform: 'TikTok' | 'YouTube' | 'Facebook';
+  profile: string;
+  outputFolder: string;
+  watermark: string;
+  totalVideos: number;
+  status: 'ACTIVE' | 'PAUSED';
+}

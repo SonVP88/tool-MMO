@@ -17,13 +17,13 @@ export const BatchSettingsForm: React.FC = () => {
   const {
     settings,
     updateSettings,
-    addLog,
     setTranslationConfigOpen,
     setCapCutConfigOpen,
+    setCharacterModalOpen,
   } = useStudioStore();
 
   const handleSyncCharacters = () => {
-    addLog('Đang đồng bộ từ điển nhân vật và thuật ngữ AI...', 'info');
+    setCharacterModalOpen(true);
   };
 
   return (

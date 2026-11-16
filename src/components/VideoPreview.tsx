@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Play, 
-  Square
+  Square,
+  Search
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 import type { BoundingBox } from '../types';
@@ -303,6 +304,22 @@ export const VideoPreview: React.FC = () => {
         <span className="text-[11px] font-mono text-slate-300 shrink-0 font-medium">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
+      </div>
+
+      {/* Auto-OCR Button Row */}
+      <div className="flex items-center justify-between pt-1 border-t border-[#233145]">
+        <button
+          type="button"
+          onClick={() => {
+            setOldSubBlurBox({ x: 18.0, y: 64.2, width: 36.0, height: 25.0 });
+            useStudioStore.getState().addLog('🔍 [Auto OCR] Đã tự động dò thấy vị trí Sub cũ: X=18.0%, Y=64.2%, W=36.0%, H=25.0% (RapidOCR Vision)', 'success');
+          }}
+          className="w-full py-1.5 px-3 bg-[#132238] hover:bg-[#1a2f4c] text-sky-300 border border-sky-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+        >
+          <Search className="w-3.5 h-3.5 text-sky-400" />
+          <span>🔍 Tự động dò vị trí Sub cũ (Auto OCR)</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-950/80 text-sky-300 border border-sky-400/30">AI Vision</span>
+        </button>
       </div>
     </div>
   );

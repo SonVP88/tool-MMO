@@ -150,3 +150,4 @@ def open_draft_and_export(
             progress_callback(92, "CapCut UI", f"UI controller thông báo: {str(e)[:60]}")
 
     return True
+

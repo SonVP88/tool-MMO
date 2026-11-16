@@ -322,3 +322,4 @@ def create_capcut_draft(
         json.dump(draft_meta, f, ensure_ascii=False, indent=2)
 
     return project_dir
+

@@ -8,7 +8,8 @@ import type {
   LogEntry, 
   BatchSettings,
   TaskProgressEvent,
-  LiveLogEvent
+  LiveLogEvent,
+  CharacterMapping
 } from '../types';
 import {
   isTauri,
@@ -76,6 +77,10 @@ interface StudioState {
   isCookieModalOpen: boolean;
   isTranslationConfigOpen: boolean;
   isCapCutConfigOpen: boolean;
+  isCharacterModalOpen: boolean;
+
+  // Characters & Multi-Speaker Mapping
+  characters: CharacterMapping[];
 
   // Actions
   initApp: () => Promise<void>;
@@ -114,6 +119,8 @@ interface StudioState {
   setCookieModalOpen: (open: boolean) => void;
   setTranslationConfigOpen: (open: boolean) => void;
   setCapCutConfigOpen: (open: boolean) => void;
+  setCharacterModalOpen: (open: boolean) => void;
+  setCharacters: (chars: CharacterMapping[]) => void;
   triggerAutoSave: () => Promise<void>;
 }
 
@@ -128,6 +135,36 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   groqApiKey: 'gsk_mock_whisper_groq_fast_key',
   douyinCookie: 'odin_tt=1a2b3c...; sessionid_ss=8f9a0...;',
   outputDir: 'C:\\Output',
+
+  isAddVideoModalOpen: false,
+  isCookieModalOpen: false,
+  isTranslationConfigOpen: false,
+  isCapCutConfigOpen: false,
+  isCharacterModalOpen: false,
+
+  characters: [
+    {
+      id: '1',
+      originalName: '萧炎',
+      translatedName: 'Tiêu Viêm',
+      pronoun: 'Ta - Ngươi',
+      voice: 'Nam Miền Bắc Trầm Ấm (vi-VN)',
+    },
+    {
+      id: '2',
+      originalName: '药老',
+      translatedName: 'Dược Lão',
+      pronoun: 'Sư đồ / Lão phu',
+      voice: 'Nam Truyện Cổ Tích Lão Niên (vi-VN)',
+    },
+    {
+      id: '3',
+      originalName: '美杜莎',
+      translatedName: 'Mỹ Đỗ Toa',
+      pronoun: 'Bản vương - Ngươi',
+      voice: 'Cô Gái Hoạt Ngôn (vi-VN)',
+    },
+  ],
 
   tasks: [
     {
@@ -266,11 +303,6 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       type: 'info',
     },
   ],
-
-  isAddVideoModalOpen: false,
-  isCookieModalOpen: false,
-  isTranslationConfigOpen: false,
-  isCapCutConfigOpen: false,
 
   initApp: async () => {
     if (isTauri()) {
@@ -628,4 +660,6 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setCookieModalOpen: (open) => set({ isCookieModalOpen: open }),
   setTranslationConfigOpen: (open) => set({ isTranslationConfigOpen: open }),
   setCapCutConfigOpen: (open) => set({ isCapCutConfigOpen: open }),
+  setCharacterModalOpen: (open) => set({ isCharacterModalOpen: open }),
+  setCharacters: (chars) => set({ characters: chars }),
 }));
