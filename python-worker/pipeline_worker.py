@@ -513,12 +513,89 @@ def main():
         speed = float(settings.get("speed", 1.0))
         voice_wav = step_tts_synthesis(task_id, subtitles_trans, temp_dir, voice_name, speed)
 
-        # Step 5: Render Video
-        final_video = step_render_video(
-            task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box
-        )
+        # Step 5: Render Video / CapCut Draft Injection
+        render_engine = settings.get("renderEngine", "ffmpeg")
+        custom_draft_dir = config.get("capcutDraftDir", "")
+        custom_capcut_exe = config.get("capcutExePath", "")
 
-        emit_done(task_id, str(final_video.resolve()), "Render video và hoàn tất toàn bộ quy trình")
+        if "capcut_draft" in render_engine.lower() or "Tạo Dự Án Nháp" in render_engine:
+            emit_progress(task_id, 85, "CapCut Draft", "Bơm Timeline vào dự án CapCut PC (com.lveditor.draft)...")
+            from capcut_draft_generator import create_capcut_draft
+
+            # Prepare audio segments list
+            tts_segments = []
+            for s in subtitles_trans:
+                seg_path = temp_dir / f"tts_{task_id}_{s['index']}.mp3"
+                if not seg_path.exists():
+                    seg_path = voice_wav
+                tts_segments.append({
+                    "start": s['start'],
+                    "end": s['end'],
+                    "audio_path": seg_path,
+                    "text": s.get('trans', '')
+                })
+
+            draft_folder = create_capcut_draft(
+                project_name=f"Reup_{task_id}",
+                raw_video_path=video_raw,
+                tts_audio_segments=tts_segments,
+                settings=settings,
+                old_sub_box=old_sub_box,
+                new_sub_box=new_sub_box,
+                custom_draft_dir=custom_draft_dir
+            )
+            emit_done(task_id, str(draft_folder.resolve()), "Đã tạo Draft CapCut hoàn tất. Mở CapCut PC để xem dự án.")
+
+        elif "capcut_auto" in render_engine.lower() or "Tự Động Hóa CapCut" in render_engine:
+            emit_progress(task_id, 85, "CapCut Auto", "Tạo Timeline và điều khiển CapCut tự động xuất video...")
+            from capcut_draft_generator import create_capcut_draft
+            from capcut_ui_controller import open_draft_and_export
+
+            tts_segments = []
+            for s in subtitles_trans:
+                seg_path = temp_dir / f"tts_{task_id}_{s['index']}.mp3"
+                if not seg_path.exists():
+                    seg_path = voice_wav
+                tts_segments.append({
+                    "start": s['start'],
+                    "end": s['end'],
+                    "audio_path": seg_path,
+                    "text": s.get('trans', '')
+                })
+
+            draft_folder = create_capcut_draft(
+                project_name=f"Reup_{task_id}",
+                raw_video_path=video_raw,
+                tts_audio_segments=tts_segments,
+                settings=settings,
+                old_sub_box=old_sub_box,
+                new_sub_box=new_sub_box,
+                custom_draft_dir=custom_draft_dir
+            )
+
+            def progress_cb(pct, stg, msg):
+                emit_progress(task_id, pct, stg, msg)
+
+            open_draft_and_export(
+                project_name=f"Reup_{task_id}",
+                output_filename=f"Reup_{task_id}",
+                output_dir=output_dir,
+                capcut_exe_path=custom_capcut_exe,
+                progress_callback=progress_cb
+            )
+
+            # Also produce guaranteed final MP4
+            final_video = step_render_video(
+                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box
+            )
+            emit_done(task_id, str(final_video.resolve()), "Tự động hóa CapCut và render video hoàn tất.")
+
+        else:
+            # Default: FFmpeg Super Fast
+            final_video = step_render_video(
+                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box
+            )
+            emit_done(task_id, str(final_video.resolve()), "Render video và hoàn tất toàn bộ quy trình")
 
     except Exception as e:
         emit_error(task_id, f"Lỗi không xác định: {str(e)}")

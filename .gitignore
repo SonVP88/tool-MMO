@@ -13,6 +13,8 @@ dist-ssr
 *.local
 temp/
 output/
+__pycache__/
+*.pyc
 
 
 # Editor directories and files

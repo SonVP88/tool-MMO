@@ -20,6 +20,7 @@ pub struct QueueState {
 pub struct QueueManager {
     pub inner: Arc<Mutex<QueueState>>,
     semaphore: Arc<Semaphore>,
+    capcut_lock: Arc<Mutex<()>>,
 }
 
 impl QueueManager {
@@ -90,6 +91,7 @@ impl QueueManager {
                 concurrency_limit,
             })),
             semaphore: Arc::new(Semaphore::new(concurrency_limit)),
+            capcut_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -214,10 +216,11 @@ pub async fn start_queue(
                     let permit = sem.clone().acquire_owned().await.unwrap();
                     let q_state = q_clone.clone();
                     let app_h = app_handle.clone();
+                    let capcut_l = queue.capcut_lock.clone();
 
                     tokio::spawn(async move {
                         let _permit = permit;
-                        process_single_task(task, q_state, app_h).await;
+                        process_single_task(task, q_state, app_h, capcut_l).await;
                     });
                 }
                 None => {
@@ -407,6 +410,7 @@ async fn process_single_task(
     task: TaskItem,
     q_state: Arc<Mutex<QueueState>>,
     app: AppHandle,
+    capcut_lock: Arc<Mutex<()>>,
 ) {
     let settings = load_current_settings().unwrap_or_default();
     let config_json = serde_json::to_string(&settings).unwrap_or_else(|_| "{}".to_string());
@@ -529,3 +533,4 @@ async fn process_single_task(
         }
     }
 }
+

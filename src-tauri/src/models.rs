@@ -28,6 +28,9 @@ pub struct StudioSettings {
     pub groq_api_key: String,
     pub douyin_cookie: String,
     pub output_dir: String,
+    pub render_engine: String,
+    pub capcut_draft_dir: String,
+    pub capcut_exe_path: String,
 }
 
 impl Default for StudioSettings {
@@ -61,6 +64,9 @@ impl Default for StudioSettings {
             groq_api_key: "".to_string(),
             douyin_cookie: "".to_string(),
             output_dir: "C:\\Output".to_string(),
+            render_engine: "FFmpeg Siêu Tốc (Chạy ngầm 100%)".to_string(),
+            capcut_draft_dir: "".to_string(),
+            capcut_exe_path: "".to_string(),
         }
     }
 }
@@ -106,3 +112,4 @@ pub struct LiveLogEvent {
     pub message: String,
     pub log_type: String, // "info", "success", "warn", "error"
 }
+

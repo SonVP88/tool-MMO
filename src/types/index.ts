@@ -44,6 +44,9 @@ export interface BatchSettings {
   fontSize: number;
   textColor: string;
   strokeColor: string;
+  renderEngine: string;
+  capcutDraftDir: string;
+  capcutExePath: string;
 }
 
 export interface StudioProfile {

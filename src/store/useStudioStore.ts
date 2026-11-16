@@ -75,6 +75,7 @@ interface StudioState {
   isAddVideoModalOpen: boolean;
   isCookieModalOpen: boolean;
   isTranslationConfigOpen: boolean;
+  isCapCutConfigOpen: boolean;
 
   // Actions
   initApp: () => Promise<void>;
@@ -112,6 +113,7 @@ interface StudioState {
   setAddVideoModalOpen: (open: boolean) => void;
   setCookieModalOpen: (open: boolean) => void;
   setTranslationConfigOpen: (open: boolean) => void;
+  setCapCutConfigOpen: (open: boolean) => void;
   triggerAutoSave: () => Promise<void>;
 }
 
@@ -221,6 +223,9 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     fontSize: 25,
     textColor: '#f59e0b',
     strokeColor: '#000000',
+    renderEngine: 'FFmpeg Siêu Tốc (Chạy ngầm 100%)',
+    capcutDraftDir: '%LOCALAPPDATA%\\CapCut\\User Data\\Projects\\com.lveditor.draft',
+    capcutExePath: '%LOCALAPPDATA%\\CapCut\\Apps\\CapCut.exe',
   },
 
   logs: [
@@ -265,6 +270,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   isAddVideoModalOpen: false,
   isCookieModalOpen: false,
   isTranslationConfigOpen: false,
+  isCapCutConfigOpen: false,
 
   initApp: async () => {
     if (isTauri()) {
@@ -621,4 +627,5 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setAddVideoModalOpen: (open) => set({ isAddVideoModalOpen: open }),
   setCookieModalOpen: (open) => set({ isCookieModalOpen: open }),
   setTranslationConfigOpen: (open) => set({ isTranslationConfigOpen: open }),
+  setCapCutConfigOpen: (open) => set({ isCapCutConfigOpen: open }),
 }));

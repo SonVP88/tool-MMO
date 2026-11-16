@@ -127,3 +127,4 @@ pub fn load_current_settings() -> Result<StudioSettings, String> {
 
     Ok(settings)
 }
+

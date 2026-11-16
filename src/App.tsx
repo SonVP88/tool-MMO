@@ -9,6 +9,7 @@ import { Footer } from './components/Footer';
 import { AddVideoModal } from './components/AddVideoModal';
 import { CookieModal } from './components/CookieModal';
 import { TranslationModal } from './components/TranslationModal';
+import { CapCutModal } from './components/CapCutModal';
 import { useStudioStore } from './store/useStudioStore';
 
 export const App: React.FC = () => {
@@ -54,6 +55,7 @@ export const App: React.FC = () => {
       <AddVideoModal />
       <CookieModal />
       <TranslationModal />
+      <CapCutModal />
     </div>
   );
 };
