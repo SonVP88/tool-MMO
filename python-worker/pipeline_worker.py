@@ -240,44 +240,99 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
 
     # 1. Try Groq Whisper large-v3 if groq_key provided
     if groq_key and len(groq_key.strip()) > 10 and not groq_key.startswith("gsk_mock"):
-        emit_progress(task_id, 32, "Lấy phụ đề", "Đang nhận diện giọng nói (ASR Groq Whisper large-v3)...")
+        emit_progress(task_id, 30, "Lấy phụ đề", "Chuẩn bị nhận diện giọng nói (ASR Groq Whisper large-v3)...")
         try:
-            import requests
-            headers = {"Authorization": f"Bearer {groq_key.strip()}"}
-            with open(audio_wav, "rb") as f:
-                files = {"file": (audio_wav.name, f, "audio/wav")}
-                data = {
-                    "model": "whisper-large-v3",
-                    "response_format": "verbose_json",
-                    "temperature": 0.0
-                }
-                res = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=90)
-                if res.status_code == 200:
-                    json_data = res.json()
-                    segments = json_data.get("segments", [])
-                    if segments:
-                        subtitles = []
-                        for s in segments:
-                            txt = s.get("text", "").strip()
-                            clean_txt = re.sub(r'^[.\s,!?…–—\-~_#*♪♩♫♬\(\)\[\]{}«»"\'`]+$', '', txt).strip()
-                            no_speech = float(s.get("no_speech_prob", 0.0))
-                            if clean_txt and no_speech < 0.65:
-                                subtitles.append({
-                                    "index": len(subtitles) + 1,
-                                    "start": round(float(s.get("start", 0.0)), 2),
-                                    "end": round(float(s.get("end", 2.0)), 2),
-                                    "text": clean_txt
-                                })
-                        if subtitles:
-                            emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế từ Whisper.")
-                            return subtitles
-                        else:
-                            emit_progress(task_id, 40, "Lấy phụ đề", "Whisper xác nhận: Video không có lời thoại người nói (chỉ có nhạc nền hoặc im lặng).")
-                            return []
-                else:
-                    emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper HTTP {res.status_code}: {res.text[:80]}")
+            import requests, wave, math
+
+            def transcribe_groq_single(wav_path: Path):
+                headers = {"Authorization": f"Bearer {groq_key.strip()}"}
+                with open(wav_path, "rb") as f:
+                    files = {"file": (wav_path.name, f, "audio/wav")}
+                    data = {
+                        "model": "whisper-large-v3",
+                        "response_format": "verbose_json",
+                        "temperature": 0.0
+                    }
+                    res = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=120)
+                    if res.status_code == 200:
+                        return res.json().get("segments", [])
+                return []
+
+            # Check audio duration for chunking long videos (1 hour, 3 hours+)
+            total_audio_sec = 0.0
+            try:
+                with wave.open(str(audio_wav), "rb") as wf:
+                    total_audio_sec = wf.getnframes() / float(wf.getframerate())
+            except Exception:
+                total_audio_sec = 0.0
+
+            CHUNK_DUR = 600 # 10 minutes per chunk (fits comfortably under Groq 25MB limit)
+            if total_audio_sec > CHUNK_DUR:
+                num_chunks = int(math.ceil(total_audio_sec / CHUNK_DUR))
+                emit_progress(task_id, 30, "Lấy phụ đề", f"Video dài {int(total_audio_sec // 60)} phút ({num_chunks} phân đoạn): Đang bóc tách ASR từng đoạn...")
+                subtitles = []
+                for c_idx in range(num_chunks):
+                    c_start = c_idx * CHUNK_DUR
+                    c_file = temp_dir / f"chunk_{task_id}_{c_idx}.wav"
+                    cmd_c = [
+                        ffmpeg_exe, "-y",
+                        "-ss", str(c_start),
+                        "-t", str(CHUNK_DUR),
+                        "-i", str(audio_wav),
+                        "-acodec", "copy",
+                        str(c_file)
+                    ]
+                    subprocess.run(cmd_c, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if not c_file.exists():
+                        continue
+
+                    pct = 30 + int(10 * ((c_idx + 1) / num_chunks))
+                    emit_progress(task_id, pct, "Lấy phụ đề", f"Whisper nhận diện đoạn {c_idx + 1}/{num_chunks} ({int(c_start // 60)}p-{int(min(total_audio_sec, c_start + CHUNK_DUR) // 60)}p)...")
+
+                    segs = transcribe_groq_single(c_file)
+                    for s in segs:
+                        txt = s.get("text", "").strip()
+                        clean_txt = re.sub(r'^[.\s,!?…–—\-~_#*♪♩♫♬\(\)\[\]{}«»"\'`]+$', '', txt).strip()
+                        no_speech = float(s.get("no_speech_prob", 0.0))
+                        if clean_txt and no_speech < 0.65:
+                            subtitles.append({
+                                "index": len(subtitles) + 1,
+                                "start": round(c_start + float(s.get("start", 0.0)), 2),
+                                "end": round(c_start + float(s.get("end", 2.0)), 2),
+                                "text": clean_txt
+                            })
+                    try:
+                        c_file.unlink()
+                    except Exception:
+                        pass
+
+                if subtitles:
+                    emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế qua toàn bộ {num_chunks} đoạn video dài.")
+                    return subtitles
+            else:
+                # Video under 10 minutes -> Single direct call
+                segments = transcribe_groq_single(audio_wav)
+                if segments:
+                    subtitles = []
+                    for s in segments:
+                        txt = s.get("text", "").strip()
+                        clean_txt = re.sub(r'^[.\s,!?…–—\-~_#*♪♩♫♬\(\)\[\]{}«»"\'`]+$', '', txt).strip()
+                        no_speech = float(s.get("no_speech_prob", 0.0))
+                        if clean_txt and no_speech < 0.65:
+                            subtitles.append({
+                                "index": len(subtitles) + 1,
+                                "start": round(float(s.get("start", 0.0)), 2),
+                                "end": round(float(s.get("end", 2.0)), 2),
+                                "text": clean_txt
+                            })
+                    if subtitles:
+                        emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế từ Whisper.")
+                        return subtitles
+                    else:
+                        emit_progress(task_id, 40, "Lấy phụ đề", "Whisper xác nhận: Video không có lời thoại người nói (chỉ có nhạc nền hoặc im lặng).")
+                        return []
         except Exception as e:
-            emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper thông báo: {str(e)[:80]}. Chuyển sang Gemini...")
+            emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper: {str(e)[:80]}. Chuyển sang Gemini...")
 
     # 2. Try Gemini 2.5 Flash Audio Transcription if gemini_key provided
     if gemini_key and len(gemini_key.strip()) > 10 and not gemini_key.startswith("AIzaSyD-mock"):
@@ -347,16 +402,23 @@ def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: 
         emit_progress(task_id, 50, "Dịch AI", "Không có câu thoại nào trong video cần dịch.")
         return []
 
-    emit_progress(task_id, 45, "Dịch AI", f"Gửi {len(subtitles)} câu thoại lên Gemini 2.5 Flash để dịch ngữ cảnh (Thể loại: {genre})...")
-
     if not gemini_key or len(gemini_key.strip()) <= 10 or gemini_key.startswith("AIzaSyD-mock"):
         raise RuntimeError(
             "Chưa cấu hình Gemini API Key để dịch thuật! Vui lòng mở mục 'Cấu Hình API Dịch' trên giao diện và dán Gemini API Key thật của bạn."
         )
 
-    try:
-        import requests
-        lines_prompt = "\n".join([f"[{s['index']}] {s['text']}" for s in subtitles])
+    import requests, math
+
+    BATCH_SIZE = 50
+    total_batches = int(math.ceil(len(subtitles) / BATCH_SIZE))
+    emit_progress(task_id, 45, "Dịch AI", f"Gửi {len(subtitles)} câu thoại lên Gemini 2.5 Flash ({total_batches} đợt dịch, thể loại: {genre})...")
+
+    pattern = re.compile(r'\[(\d+)\]\s*(.+)')
+    translated_map = {}
+
+    for b_idx in range(total_batches):
+        batch = subtitles[b_idx * BATCH_SIZE : (b_idx + 1) * BATCH_SIZE]
+        lines_prompt = "\n".join([f"[{s['index']}] {s['text']}" for s in batch])
         prompt = (
             f"Bạn là chuyên gia dịch thuật video thể loại {genre} ({quality}).\n"
             f"Hãy dịch các câu thoại sau sang tiếng Việt tự nhiên, giữ nguyên cấu trúc [index] và nghĩa gốc:\n"
@@ -367,26 +429,29 @@ def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: 
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
         }
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
-        if res.status_code == 200:
-            resp_json = res.json()
-            text_out = resp_json['candidates'][0]['content']['parts'][0]['text']
-            pattern = re.compile(r'\[(\d+)\]\s*(.+)')
-            translated_map = {}
-            for line in text_out.split('\n'):
-                m = pattern.search(line.strip())
-                if m:
-                    idx = int(m.group(1))
-                    translated_map[idx] = m.group(2).strip()
+        pct = 45 + int(15 * ((b_idx + 1) / total_batches))
+        emit_progress(task_id, pct, "Dịch AI", f"Gemini dịch đợt {b_idx + 1}/{total_batches} (câu {batch[0]['index']}-{batch[-1]['index']}/{len(subtitles)})...")
 
-            for s in subtitles:
-                s['trans'] = translated_map.get(s['index'], s.get('text', ''))
-            emit_progress(task_id, 60, "Dịch AI", f"Gemini hoàn tất dịch {len(subtitles)} câu thoại sang Tiếng Việt chuẩn xác.")
-            return subtitles
-        else:
-            raise RuntimeError(f"Gemini API phản hồi mã lỗi HTTP {res.status_code}: {res.text[:120]}")
-    except Exception as e:
-        raise RuntimeError(f"Lỗi gọi Gemini 2.5 Flash API: {str(e)[:150]}")
+        try:
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=75)
+            if res.status_code == 200:
+                resp_json = res.json()
+                text_out = resp_json['candidates'][0]['content']['parts'][0]['text']
+                for line in text_out.split('\n'):
+                    m = pattern.search(line.strip())
+                    if m:
+                        idx = int(m.group(1))
+                        translated_map[idx] = m.group(2).strip()
+            else:
+                emit_progress(task_id, pct, "Dịch AI", f"Gemini đợt {b_idx+1} cảnh báo HTTP {res.status_code}")
+        except Exception as e:
+            emit_progress(task_id, pct, "Dịch AI", f"Lỗi đợt dịch {b_idx+1}: {str(e)[:60]}")
+
+    for s in subtitles:
+        s['trans'] = translated_map.get(s['index'], s.get('text', ''))
+
+    emit_progress(task_id, 60, "Dịch AI", f"Gemini hoàn tất dịch toàn bộ {len(subtitles)} câu thoại sang Tiếng Việt chuẩn xác.")
+    return subtitles
 
 # ==================== STEP 4: EDGE-TTS VOICE SYNTHESIS ====================
 async def generate_edge_tts_async(text: str, voice: str, rate_str: str, out_path: Path):
@@ -418,27 +483,48 @@ def step_tts_synthesis(task_id: int, subtitles: list, temp_dir: Path, voice_name
     import asyncio
     ffmpeg_exe = get_ffmpeg_path()
 
+    emit_progress(task_id, 65, "Tạo giọng đọc", f"Khởi tạo lồng tiếng song song ({len(subtitles)} câu thoại)...")
+
+    async def synth_batch():
+        sem = asyncio.Semaphore(5)
+        completed_count = 0
+
+        async def worker(sub_item):
+            nonlocal completed_count
+            txt = sub_item.get('trans', sub_item.get('text', '')).strip()
+            if not txt:
+                completed_count += 1
+                return
+            idx = sub_item['index']
+            seg_mp3 = temp_dir / f"tts_{task_id}_{idx}.mp3"
+            seg_wav = temp_dir / f"tts_{task_id}_{idx}.wav"
+
+            async with sem:
+                try:
+                    await generate_edge_tts_async(txt, voice_tag, rate_str, seg_mp3)
+                    if seg_mp3.exists() and seg_mp3.stat().st_size > 0:
+                        cmd_conv = [
+                            ffmpeg_exe, "-y",
+                            "-i", str(seg_mp3),
+                            "-ar", "24000", "-ac", "1",
+                            str(seg_wav)
+                        ]
+                        subprocess.run(cmd_conv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+            completed_count += 1
+            if completed_count % 25 == 0 or completed_count == len(subtitles):
+                pct = 65 + int(12 * (completed_count / len(subtitles)))
+                emit_progress(task_id, pct, "Tạo giọng đọc", f"Lồng tiếng câu {completed_count}/{len(subtitles)} ({pct}%)...")
+
+        await asyncio.gather(*[worker(s) for s in subtitles])
+
+    asyncio.run(synth_batch())
+
     for s in subtitles:
-        txt = s.get('trans', s.get('text', '')).strip()
-        if not txt:
-            continue
-        seg_mp3 = temp_dir / f"tts_{task_id}_{s['index']}.mp3"
         seg_wav = temp_dir / f"tts_{task_id}_{s['index']}.wav"
-        try:
-            asyncio.run(generate_edge_tts_async(txt, voice_tag, rate_str, seg_mp3))
-            if seg_mp3.exists() and seg_mp3.stat().st_size > 0:
-                # Convert to PCM WAV 24kHz mono for clean stitching
-                cmd_conv = [
-                    ffmpeg_exe, "-y",
-                    "-i", str(seg_mp3),
-                    "-ar", "24000", "-ac", "1",
-                    str(seg_wav)
-                ]
-                subprocess.run(cmd_conv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                if seg_wav.exists() and seg_wav.stat().st_size > 0:
-                    audio_segments.append((s, seg_wav))
-        except Exception:
-            pass
+        if seg_wav.exists() and seg_wav.stat().st_size > 0:
+            audio_segments.append((s, seg_wav))
 
     full_voice_wav = temp_dir / f"full_voice_{task_id}.wav"
 
