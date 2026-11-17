@@ -229,25 +229,27 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
         emit_progress(task_id, 40, "Lấy phụ đề", "Video không chứa âm thanh, bỏ qua bước nhận diện giọng nói.")
         return []
 
-    # Encode compressed mp3 for Gemini audio upload
+    # Encode high-efficiency 32k mono mp3 (~14MB per hour, fits up to 90 min under Groq 25MB limit)
     cmd_mp3 = [
         ffmpeg_exe, "-y",
         "-i", str(audio_wav),
-        "-b:a", "64k",
+        "-b:a", "32k", "-ar", "16000", "-ac", "1",
         str(audio_mp3)
     ]
     subprocess.run(cmd_mp3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 1. Try Groq Whisper large-v3 if groq_key provided
     if groq_key and len(groq_key.strip()) > 10 and not groq_key.startswith("gsk_mock"):
-        emit_progress(task_id, 30, "Lấy phụ đề", "Chuẩn bị nhận diện giọng nói (ASR Groq Whisper large-v3)...")
+        emit_progress(task_id, 30, "Lấy phụ đề", "Bóc tách giọng nói siêu tốc qua Groq Whisper large-v3...")
         try:
             import requests, wave, math
+            from concurrent.futures import ThreadPoolExecutor
 
-            def transcribe_groq_single(wav_path: Path):
+            def transcribe_groq_file(file_path: Path):
                 headers = {"Authorization": f"Bearer {groq_key.strip()}"}
-                with open(wav_path, "rb") as f:
-                    files = {"file": (wav_path.name, f, "audio/wav")}
+                mime = "audio/mp3" if file_path.suffix.lower() == ".mp3" else "audio/wav"
+                with open(file_path, "rb") as f:
+                    files = {"file": (file_path.name, f, mime)}
                     data = {
                         "model": "whisper-large-v3",
                         "response_format": "verbose_json",
@@ -258,7 +260,7 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
                         return res.json().get("segments", [])
                 return []
 
-            # Check audio duration for chunking long videos (1 hour, 3 hours+)
+            # Check audio duration
             total_audio_sec = 0.0
             try:
                 with wave.open(str(audio_wav), "rb") as wf:
@@ -266,52 +268,13 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
             except Exception:
                 total_audio_sec = 0.0
 
-            CHUNK_DUR = 600 # 10 minutes per chunk (fits comfortably under Groq 25MB limit)
-            if total_audio_sec > CHUNK_DUR:
-                num_chunks = int(math.ceil(total_audio_sec / CHUNK_DUR))
-                emit_progress(task_id, 30, "Lấy phụ đề", f"Video dài {int(total_audio_sec // 60)} phút ({num_chunks} phân đoạn): Đang bóc tách ASR từng đoạn...")
-                subtitles = []
-                for c_idx in range(num_chunks):
-                    c_start = c_idx * CHUNK_DUR
-                    c_file = temp_dir / f"chunk_{task_id}_{c_idx}.wav"
-                    cmd_c = [
-                        ffmpeg_exe, "-y",
-                        "-ss", str(c_start),
-                        "-t", str(CHUNK_DUR),
-                        "-i", str(audio_wav),
-                        "-acodec", "copy",
-                        str(c_file)
-                    ]
-                    subprocess.run(cmd_c, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    if not c_file.exists():
-                        continue
+            target_audio = audio_mp3 if (audio_mp3.exists() and audio_mp3.stat().st_size > 100) else audio_wav
+            audio_size_mb = target_audio.stat().st_size / (1024 * 1024)
 
-                    pct = 30 + int(10 * ((c_idx + 1) / num_chunks))
-                    emit_progress(task_id, pct, "Lấy phụ đề", f"Whisper nhận diện đoạn {c_idx + 1}/{num_chunks} ({int(c_start // 60)}p-{int(min(total_audio_sec, c_start + CHUNK_DUR) // 60)}p)...")
-
-                    segs = transcribe_groq_single(c_file)
-                    for s in segs:
-                        txt = s.get("text", "").strip()
-                        clean_txt = re.sub(r'^[.\s,!?…–—\-~_#*♪♩♫♬\(\)\[\]{}«»"\'`]+$', '', txt).strip()
-                        no_speech = float(s.get("no_speech_prob", 0.0))
-                        if clean_txt and no_speech < 0.65:
-                            subtitles.append({
-                                "index": len(subtitles) + 1,
-                                "start": round(c_start + float(s.get("start", 0.0)), 2),
-                                "end": round(c_start + float(s.get("end", 2.0)), 2),
-                                "text": clean_txt
-                            })
-                    try:
-                        c_file.unlink()
-                    except Exception:
-                        pass
-
-                if subtitles:
-                    emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế qua toàn bộ {num_chunks} đoạn video dài.")
-                    return subtitles
-            else:
-                # Video under 10 minutes -> Single direct call
-                segments = transcribe_groq_single(audio_wav)
+            # Strategy A: File under 24MB (Videos up to ~90 minutes) -> 1 Single Shot! (No slicing needed)
+            if audio_size_mb <= 23.5:
+                emit_progress(task_id, 32, "Lấy phụ đề", f"Video {int(total_audio_sec // 60)} phút ({audio_size_mb:.1f}MB): Bắn 1 lần duy nhất lên Groq LPU...")
+                segments = transcribe_groq_file(target_audio)
                 if segments:
                     subtitles = []
                     for s in segments:
@@ -326,11 +289,66 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
                                 "text": clean_txt
                             })
                     if subtitles:
-                        emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế từ Whisper.")
+                        emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế trong tích tắc.")
                         return subtitles
                     else:
-                        emit_progress(task_id, 40, "Lấy phụ đề", "Whisper xác nhận: Video không có lời thoại người nói (chỉ có nhạc nền hoặc im lặng).")
+                        emit_progress(task_id, 40, "Lấy phụ đề", "Whisper xác nhận: Video không có lời thoại (chỉ có nhạc hoặc im lặng).")
                         return []
+
+            # Strategy B: Video over 1.5 hours (2-5+ hours) -> Parallel Multi-Threaded Chunking (45 min chunks)
+            CHUNK_DUR = 2700 # 45 minutes (~10MB per chunk)
+            num_chunks = int(math.ceil(total_audio_sec / CHUNK_DUR))
+            emit_progress(task_id, 30, "Lấy phụ đề", f"Video dài {int(total_audio_sec // 60)} phút: Tách {num_chunks} phần và gửi song song lên Groq...")
+
+            def process_chunk(c_idx):
+                c_start = c_idx * CHUNK_DUR
+                c_file = temp_dir / f"chunk_{task_id}_{c_idx}.mp3"
+                cmd_c = [
+                    ffmpeg_exe, "-y",
+                    "-ss", str(c_start),
+                    "-t", str(CHUNK_DUR),
+                    "-i", str(target_audio),
+                    "-c:a", "copy",
+                    str(c_file)
+                ]
+                subprocess.run(cmd_c, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if not c_file.exists():
+                    return c_idx, c_start, []
+                segs = transcribe_groq_file(c_file)
+                try:
+                    c_file.unlink()
+                except Exception:
+                    pass
+                return c_idx, c_start, segs
+
+            # Execute all chunks in parallel!
+            with ThreadPoolExecutor(max_workers=min(4, num_chunks)) as executor:
+                chunk_results = list(executor.map(process_chunk, range(num_chunks)))
+
+            # Sort results by chunk index to maintain exact timeline order
+            chunk_results.sort(key=lambda r: r[0])
+            subtitles = []
+            for c_idx, c_start, segs in chunk_results:
+                for s in segs:
+                    txt = s.get("text", "").strip()
+                    clean_txt = re.sub(r'^[.\s,!?…–—\-~_#*♪♩♫♬\(\)\[\]{}«»"\'`]+$', '', txt).strip()
+                    no_speech = float(s.get("no_speech_prob", 0.0))
+                    if clean_txt and no_speech < 0.65:
+                        subtitles.append({
+                            "index": len(subtitles) + 1,
+                            "start": round(c_start + float(s.get("start", 0.0)), 2),
+                            "end": round(c_start + float(s.get("end", 2.0)), 2),
+                            "text": clean_txt
+                        })
+
+            if subtitles:
+                emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện song song thành công {len(subtitles)} câu thoại qua toàn bộ {num_chunks} phần video.")
+                return subtitles
+            else:
+                emit_progress(task_id, 40, "Lấy phụ đề", "Whisper xác nhận: Video không có lời thoại người nói.")
+                return []
+        except Exception as e:
+            emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper: {str(e)[:80]}. Chuyển sang Gemini...")
         except Exception as e:
             emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper: {str(e)[:80]}. Chuyển sang Gemini...")
 
