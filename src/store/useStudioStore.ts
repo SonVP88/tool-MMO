@@ -222,6 +222,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     capcutSyncSpeed: true,
     capcutDraftDir: '%LOCALAPPDATA%\\CapCut\\User Data\\Projects\\com.lveditor.draft',
     capcutExePath: '%LOCALAPPDATA%\\CapCut\\Apps\\CapCut.exe',
+    audioFilterMode: 'vocal_cut',
+    audioDenoise: true,
   },
 
   logs: [

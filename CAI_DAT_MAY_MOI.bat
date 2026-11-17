@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title AUTOMATION STUDIO - SETUP
 echo =====================================================================
 echo    AUTOMATION STUDIO - CAI DAT MOI TRUONG MAY MOI (V2.2.1)

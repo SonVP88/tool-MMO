@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title AUTOMATION STUDIO - LAUNCHER
 echo =====================================================================
 echo    AUTOMATION STUDIO - TU DONG HOA SAN XUAT HANG LOAT (PRO V2.2.1)

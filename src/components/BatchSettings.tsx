@@ -87,7 +87,14 @@ export const BatchSettingsForm: React.FC = () => {
         <div className="relative">
           <select
             value={settings.aiEngineMode || 'CAPCUT_PRO_NATIVE'}
-            onChange={(e) => updateSettings({ aiEngineMode: e.target.value as any })}
+            onChange={(e) => {
+              const mode = e.target.value as any;
+              const updates: any = { aiEngineMode: mode };
+              if (mode === 'CAPCUT_PRO_NATIVE' || mode === 'HYBRID_PRO') {
+                updates.renderEngine = 'Tự Động Hóa CapCut Toàn Diện (Tự tạo Timeline + Tự mở CapCut bấm Xuất Video)';
+              }
+              updateSettings(updates);
+            }}
             className="w-full bg-[#151d2a] border border-[#2e405a] rounded-md px-2.5 py-1.5 text-xs text-purple-300 font-semibold focus:outline-none focus:border-purple-500 appearance-none cursor-pointer"
           >
             <option value="CAPCUT_PRO_NATIVE">
@@ -102,6 +109,38 @@ export const BatchSettingsForm: React.FC = () => {
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-purple-400 absolute right-2.5 top-2.5 pointer-events-none" />
         </div>
+
+        {/* CapCut Auto Pipeline Visual Workflow */}
+        {settings.aiEngineMode !== 'CLOUD_LOCAL' && (
+          <div className="bg-[#121926] p-2 rounded border border-purple-500/20 text-[10px] space-y-1.5">
+            <div className="text-purple-300 font-bold flex items-center justify-between">
+              <span>🤖 Mô hình Luồng Auto CapCut Pro (5 Bước Khép Kín):</span>
+              <span className="text-emerald-400 text-[9px] bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-500/30">Tự động 100%</span>
+            </div>
+            <div className="grid grid-cols-5 gap-1 text-center font-mono text-[9px]">
+              <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
+                <span className="block font-bold text-amber-400">BƯỚC 1</span>
+                Nạp Video & Khung
+              </div>
+              <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
+                <span className="block font-bold text-blue-400">BƯỚC 2</span>
+                Che Sub Cũ & Blur
+              </div>
+              <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
+                <span className="block font-bold text-purple-400">BƯỚC 3</span>
+                Auto Sub & Dịch
+              </div>
+              <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
+                <span className="block font-bold text-emerald-400">BƯỚC 4</span>
+                Giọng VIP Khớp Âm
+              </div>
+              <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
+                <span className="block font-bold text-rose-400">BƯỚC 5</span>
+                Tự Xuất C:\Output
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* CapCut VIP Voice Configuration for Pro Modes */}
         {settings.aiEngineMode !== 'CLOUD_LOCAL' && (
@@ -269,6 +308,59 @@ export const BatchSettingsForm: React.FC = () => {
           </div>
         </div>
 
+        {/* Bộ Lọc & Xử Lý Âm Thanh Chuyên Sâu */}
+        <div className="bg-[#0e141e] p-2 rounded-lg border border-[#253347] flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5">
+              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+              Bộ Lọc & Xử Lý Âm Gốc:
+            </label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                id="audioDenoise"
+                checked={settings.audioDenoise !== false}
+                onChange={(e) => updateSettings({ audioDenoise: e.target.checked })}
+                className="rounded border-[#26354a] bg-[#0f141c] text-cyan-500 focus:ring-0 cursor-pointer"
+              />
+              <label htmlFor="audioDenoise" className="text-[10px] text-cyan-300 cursor-pointer select-none">
+                Khử ồn FFT (Denoise)
+              </label>
+            </div>
+          </div>
+
+          <div className="relative">
+            <select
+              value={settings.audioFilterMode || 'vocal_cut'}
+              onChange={(e) => {
+                const mode = e.target.value as any;
+                const updates: any = { audioFilterMode: mode };
+                if (mode === 'mute_original') {
+                  updates.originalAudioVolume = 0;
+                } else if (settings.originalAudioVolume === 0) {
+                  updates.originalAudioVolume = 20;
+                }
+                updateSettings(updates);
+              }}
+              className="w-full bg-[#151d2a] border border-[#2e405a] rounded-md px-2.5 py-1.5 text-xs text-cyan-300 font-semibold focus:outline-none focus:border-cyan-500 appearance-none cursor-pointer"
+            >
+              <option value="vocal_cut">
+                🎤 Khử giọng nói gốc (Vocal Cut - Triệt lời thoại, giữ BGM & SFX)
+              </option>
+              <option value="ducking">
+                📉 Tự động né âm (Smart Ducking - BGM tự giảm khi AI đọc)
+              </option>
+              <option value="mute_original">
+                🔇 Tắt hoàn toàn tiếng gốc (100% Giọng đọc AI thuyết minh)
+              </option>
+              <option value="mix_normal">
+                🎚️ Trộn âm thông thường (Theo tỷ lệ % âm lượng)
+              </option>
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-cyan-400 absolute right-2.5 top-2.5 pointer-events-none" />
+          </div>
+        </div>
+
         {/* Âm gốc */}
         <div className="grid grid-cols-2 gap-3 items-center">
           <div className="flex flex-col gap-1">
@@ -278,7 +370,7 @@ export const BatchSettingsForm: React.FC = () => {
                 Âm gốc:
               </span>
               <span className="font-mono text-amber-400 font-bold">
-                {settings.originalAudioVolume}%
+                {settings.audioFilterMode === 'mute_original' ? '0% (Muted)' : `${settings.originalAudioVolume}%`}
               </span>
             </div>
             <input
@@ -286,14 +378,18 @@ export const BatchSettingsForm: React.FC = () => {
               min="0"
               max="100"
               step="5"
-              value={settings.originalAudioVolume}
+              disabled={settings.audioFilterMode === 'mute_original'}
+              value={settings.audioFilterMode === 'mute_original' ? 0 : settings.originalAudioVolume}
               onChange={(e) => updateSettings({ originalAudioVolume: parseInt(e.target.value) })}
-              className="w-full accent-amber-500 cursor-pointer"
+              className={`w-full accent-amber-500 cursor-pointer ${settings.audioFilterMode === 'mute_original' ? 'opacity-40 cursor-not-allowed' : ''}`}
             />
           </div>
 
-          <div className="text-[10px] text-slate-500 italic pl-1">
-            Giảm âm nền gốc để giọng đọc AI nổi bật rõ ràng
+          <div className="text-[10px] text-slate-400 italic pl-1 leading-tight">
+            {settings.audioFilterMode === 'vocal_cut' && '⚡ Khử giọng gốc, giữ lại nhạc nền & âm thanh võ thuật sống động'}
+            {settings.audioFilterMode === 'ducking' && '📉 Nhạc nền tự hạ khi AI thuyết minh, tự tăng khi ngắt câu'}
+            {settings.audioFilterMode === 'mute_original' && '🔇 Tắt hoàn toàn âm thanh gốc, chống bản quyền âm thanh 100%'}
+            {settings.audioFilterMode === 'mix_normal' && '🎚️ Giảm âm nền gốc theo % cài đặt để tôn giọng AI'}
           </div>
         </div>
 

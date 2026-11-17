@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "id": 1794882874415,
+    "name": "gemini_generated_video_f0568dda",
+    "source": "D:\\sonpd\\toolMMO\\tool-MMO\\python-worker\\temp\\uploads\\gemini_generated_video_f0568dda.mp4",
+    "stage": "Hoàn tất",
+    "progress": 100,
+    "status": "DONE",
+    "note": "Render video và hoàn tất toàn bộ quy trình",
+    "outputPath": "C:\\Output\\Reup_1794882874415.mp4",
+    "selected": false
+  }
+]

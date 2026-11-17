@@ -51,6 +51,8 @@ export interface BatchSettings {
   capcutSyncSpeed?: boolean;
   capcutDraftDir: string;
   capcutExePath: string;
+  audioFilterMode?: 'vocal_cut' | 'ducking' | 'mute_original' | 'mix_normal';
+  audioDenoise?: boolean;
 }
 
 export interface StudioProfile {

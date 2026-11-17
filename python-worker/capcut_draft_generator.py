@@ -72,6 +72,8 @@ def create_capcut_draft(
     total_duration_us = sec_to_us(total_duration_sec)
 
     orig_volume = float(settings.get("originalAudioVolume", 20)) / 100.0
+    if settings.get("audioFilterMode") == "mute_original":
+        orig_volume = 0.0
     voice_volume = float(settings.get("voiceVolume", 100)) / 100.0
     font_size = float(settings.get("fontSize", 25))
     text_color = settings.get("textColor", "#f59e0b")
