@@ -31,6 +31,8 @@ export const ControlPanel: React.FC = () => {
     globalProgress,
     setAddVideoModalOpen,
     setCookieModalOpen,
+    setTranslationConfigOpen,
+    geminiApiKey,
     addLog,
     openFolder,
     outputDir,
@@ -58,6 +60,32 @@ export const ControlPanel: React.FC = () => {
           Chế độ đa luồng
         </span>
       </div>
+
+      {/* Missing API Key Warning Banner */}
+      {!geminiApiKey && (
+        <div 
+          onClick={() => setTranslationConfigOpen(true)}
+          className="bg-amber-500/15 border-2 border-amber-500/70 hover:bg-amber-500/25 transition-all rounded-xl p-3 flex items-center justify-between cursor-pointer shadow-lg animate-pulse"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-amber-400"></span>
+            <div>
+              <span className="text-xs font-bold text-amber-300 block">
+                ⚠️ BẠN CHƯA NHẬP GEMINI API KEY ĐỂ DỊCH THUẬT!
+              </span>
+              <span className="text-[11px] text-slate-300">
+                AI cần API Key để nhận diện giọng nói và dịch chuẩn video thật. Bấm vào đây để nhập ngay (Miễn phí 100%).
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs rounded-lg shadow-md shrink-0 cursor-pointer"
+          >
+            👉 NHẬP KEY NGAY
+          </button>
+        </div>
+      )}
 
       {/* Row 1: Primary Action Buttons */}
       <div className="grid grid-cols-4 gap-2">
@@ -103,13 +131,25 @@ export const ControlPanel: React.FC = () => {
       </div>
 
       {/* Row 2: Secondary Tool Buttons */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-2">
         <button
           onClick={retryErrors}
           className="py-1.5 px-2 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white flex items-center justify-center gap-1.5 transition-all shadow-sm"
         >
           <RotateCw className="w-3.5 h-3.5" />
           ⟳ Thử lại lỗi
+        </button>
+
+        <button
+          onClick={() => setTranslationConfigOpen(true)}
+          className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
+            geminiApiKey
+              ? 'bg-[#152e25] text-emerald-300 border border-emerald-500/40 hover:bg-[#1a382d]'
+              : 'bg-amber-500 text-black hover:bg-amber-400 animate-bounce font-black'
+          }`}
+        >
+          <KeyRound className="w-3.5 h-3.5" />
+          {geminiApiKey ? '🔑 API Dịch (Đã có)' : '🔑 NHẬP API KEY'}
         </button>
 
         <button
@@ -126,7 +166,7 @@ export const ControlPanel: React.FC = () => {
           title={`Mở thư mục: ${outputDir || 'C:\\Output'}`}
         >
           <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
-          📁 Mở Thư Mục ({outputDir ? outputDir.split('\\')[0] || 'C:' : 'C:'})
+          📁 Mở Thư Mục
         </button>
 
         <button

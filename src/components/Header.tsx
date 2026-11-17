@@ -11,7 +11,8 @@ import {
   ChevronDown, 
   Settings2,
   CheckCircle2,
-  Bot
+  Bot,
+  Key
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 import type { TopTab } from '../types';
@@ -28,6 +29,8 @@ export const Header: React.FC = () => {
     addProfile,
     autoSaveTime,
     triggerAutoSave,
+    geminiApiKey,
+    setTranslationConfigOpen,
     addLog,
   } = useStudioStore();
 
@@ -196,6 +199,19 @@ export const Header: React.FC = () => {
           >
             <Save className="w-3.5 h-3.5" />
             Lưu Cấu Hình
+          </button>
+
+          {/* API Key Quick Button */}
+          <button
+            onClick={() => setTranslationConfigOpen(true)}
+            className={`px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
+              geminiApiKey
+                ? 'bg-[#132c22] text-emerald-300 border border-emerald-500/50 hover:bg-[#193a2d]'
+                : 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black hover:from-amber-400 hover:to-yellow-300 animate-pulse font-black'
+            }`}
+          >
+            <Key className="w-3.5 h-3.5" />
+            {geminiApiKey ? '🔑 API Dịch (Đã có)' : '🔑 NHẬP API KEY'}
           </button>
 
           {/* Manage Profiles Button */}
