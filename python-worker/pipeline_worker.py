@@ -804,12 +804,25 @@ def main():
     except Exception:
         config = {}
 
-    settings = config.get("settings", {})
-    old_sub_box = config.get("oldSubBlurBox", {"x": 18, "y": 72, "width": 32, "height": 9})
-    new_sub_box = config.get("newSubBox", {"x": 20, "y": 78, "width": 60, "height": 11})
-    gemini_key = config.get("geminiApiKey", "")
-    groq_key = config.get("groqApiKey", "")
-    cookie_data = config.get("douyinCookie", "")
+    settings = config.get("settings", config)
+    old_sub_box = config.get("oldSubBlurBox", config.get("old_sub_blur_box", {"x": 18, "y": 72, "width": 32, "height": 9}))
+    new_sub_box = config.get("newSubBox", config.get("new_sub_box", {"x": 20, "y": 78, "width": 60, "height": 11}))
+    gemini_key = config.get("geminiApiKey", config.get("gemini_api_key", settings.get("geminiApiKey", settings.get("gemini_api_key", ""))))
+    groq_key = config.get("groqApiKey", config.get("groq_api_key", settings.get("groqApiKey", settings.get("groq_api_key", ""))))
+    cookie_data = config.get("douyinCookie", config.get("douyin_cookie", settings.get("douyinCookie", settings.get("douyin_cookie", ""))))
+
+    # Always fallback to disk config/settings.json if keys missing
+    settings_file = BASE_DIR / "config" / "settings.json"
+    if settings_file.exists():
+        try:
+            with open(settings_file, "r", encoding="utf-8") as sf:
+                disk_cfg = json.load(sf)
+                if not gemini_key:
+                    gemini_key = disk_cfg.get("gemini_api_key", disk_cfg.get("geminiApiKey", ""))
+                if not groq_key:
+                    groq_key = disk_cfg.get("groq_api_key", disk_cfg.get("groqApiKey", ""))
+        except Exception:
+            pass
 
     temp_dir = Path(f"./temp/task_{task_id}").resolve()
     temp_dir.mkdir(parents=True, exist_ok=True)

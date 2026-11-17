@@ -465,16 +465,32 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                 return
 
             import urllib.request
+            import urllib.error
+            browser_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
             if key_type == "gemini":
                 try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
                     req_payload = json.dumps({"contents": [{"parts": [{"text": "ping"}]}]}).encode('utf-8')
-                    req = urllib.request.Request(url, data=req_payload, headers={"Content-Type": "application/json"}, method="POST")
+                    headers = {"Content-Type": "application/json", "User-Agent": browser_ua}
+                    req = urllib.request.Request(url, data=req_payload, headers=headers, method="POST")
                     with urllib.request.urlopen(req, timeout=10) as resp:
                         if resp.status == 200:
                             emit_live_log("✔ Kiểm tra Gemini 2.5 Flash API Key: Kết nối thành công!", "success")
                             self.send_json({"valid": True, "model": "gemini-2.5-flash", "message": "Kết nối Gemini 2.5 Flash thành công!"})
                             return
+                except urllib.error.HTTPError as e:
+                    body = e.read().decode('utf-8', errors='ignore')
+                    err_msg = f"HTTP {e.code}"
+                    try:
+                        err_json = json.loads(body)
+                        if "error" in err_json and "message" in err_json["error"]:
+                            err_msg = err_json["error"]["message"]
+                    except Exception:
+                        pass
+                    emit_live_log(f"✖ Kiểm tra Gemini API Key thất bại: {err_msg}", "error")
+                    self.send_json({"valid": False, "message": f"Lỗi Gemini: {err_msg}"}, 400)
+                    return
                 except Exception as e:
                     emit_live_log(f"✖ Kiểm tra Gemini API Key thất bại: {e}", "error")
                     self.send_json({"valid": False, "message": f"Lỗi Gemini: {str(e)[:120]}"}, 400)
@@ -482,12 +498,25 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
             elif key_type == "groq":
                 try:
                     url = "https://api.groq.com/openai/v1/models"
-                    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"}, method="GET")
+                    headers = {"Authorization": f"Bearer {api_key}", "User-Agent": browser_ua}
+                    req = urllib.request.Request(url, headers=headers, method="GET")
                     with urllib.request.urlopen(req, timeout=10) as resp:
                         if resp.status == 200:
                             emit_live_log("✔ Kiểm tra Groq Whisper API Key: Kết nối thành công!", "success")
                             self.send_json({"valid": True, "model": "whisper-large-v3", "message": "Kết nối Groq Whisper thành công!"})
                             return
+                except urllib.error.HTTPError as e:
+                    body = e.read().decode('utf-8', errors='ignore')
+                    err_msg = f"HTTP {e.code}"
+                    try:
+                        err_json = json.loads(body)
+                        if "error" in err_json and "message" in err_json["error"]:
+                            err_msg = err_json["error"]["message"]
+                    except Exception:
+                        pass
+                    emit_live_log(f"✖ Kiểm tra Groq API Key thất bại: {err_msg}", "error")
+                    self.send_json({"valid": False, "message": f"Lỗi Groq: {err_msg}"}, 400)
+                    return
                 except Exception as e:
                     emit_live_log(f"✖ Kiểm tra Groq API Key thất bại: {e}", "error")
                     self.send_json({"valid": False, "message": f"Lỗi Groq: {str(e)[:120]}"}, 400)
