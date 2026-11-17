@@ -23,6 +23,47 @@ try:
 except ImportError:
     auto = None
 
+class CapCutOSD:
+    """Floating On-Screen Display HUD Banner over CapCut window"""
+    def __init__(self):
+        self.status_file = Path("temp") / f"osd_status_{int(time.time() * 1000)}.json"
+        self.status_file.parent.mkdir(parents=True, exist_ok=True)
+        self.process = None
+
+    def start(self, initial_msg="Đang khởi động điều khiển CapCut..."):
+        try:
+            with open(self.status_file, "w", encoding="utf-8") as f:
+                json.dump({"active": True, "message": initial_msg}, f)
+            hud_script = Path(__file__).parent / "osd_hud.py"
+            if hud_script.exists():
+                self.process = subprocess.Popen([sys.executable, str(hud_script), str(self.status_file)])
+        except Exception:
+            pass
+
+    def update(self, msg: str):
+        try:
+            with open(self.status_file, "w", encoding="utf-8") as f:
+                json.dump({"active": True, "message": msg}, f)
+        except Exception:
+            pass
+
+    def stop(self, final_msg="Hoàn tất!", delay=2):
+        try:
+            self.update(final_msg)
+            time.sleep(delay)
+            with open(self.status_file, "w", encoding="utf-8") as f:
+                json.dump({"active": False, "message": final_msg}, f)
+            if self.process:
+                self.process.terminate()
+        except Exception:
+            pass
+        finally:
+            try:
+                if self.status_file.exists():
+                    self.status_file.unlink()
+            except Exception:
+                pass
+
 def get_capcut_exe_path(custom_path: str = None) -> str:
     if custom_path and os.path.isfile(custom_path):
         return custom_path
@@ -355,39 +396,48 @@ def run_native_capcut_pro_pipeline(
     is_pro = (account_type.upper() == "PRO")
     mode_label = "CapCut Pro VIP" if is_pro else "CapCut Thường (Free)"
 
-    if progress_callback:
-        progress_callback(30, "CapCut Pipeline", f"Khởi động Virtual Operator điều khiển {mode_label} ({ai_engine_mode})...")
+    # Initialize Floating OSD Banner on top of CapCut window
+    osd = CapCutOSD()
+    osd.start(f"Khởi động Virtual Operator điều khiển {mode_label} ({ai_engine_mode})...")
 
-    ensure_capcut_running(capcut_exe_path)
-    time.sleep(2)
-
-    # 1. Auto Subtitles
-    if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":
-        trigger_capcut_auto_captions(progress_callback)
-        trigger_capcut_bilingual_translate(progress_callback)
-    else:
+    def osd_progress(pct, stage, msg):
+        osd.update(f"[{stage}] {msg}")
         if progress_callback:
-            progress_callback(50, "Căn Chỉnh Sub", f"[{mode_label}] Nạp sub Tiếng Việt chuẩn ngữ cảnh và căn chỉnh vị trí hiển thị...")
-        time.sleep(1.5)
+            progress_callback(pct, stage, msg)
 
-    # 2. Text to Speech Dubbing
-    if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":
-        trigger_capcut_text_to_speech(voice_name=vip_voice, sync_speed=sync_speed, progress_callback=progress_callback)
-    else:
-        if progress_callback:
-            progress_callback(75, "Lồng Tiếng Khớp Âm", f"[{mode_label}] Đồng bộ thời lượng câu thoại và giọng đọc lồng tiếng ăn khớp 100% với phụ đề...")
-        time.sleep(1.5)
+    try:
+        osd_progress(30, "CapCut Pipeline", f"Khởi động Virtual Operator điều khiển {mode_label} ({ai_engine_mode})...")
 
-    # 3. Export Video via UI
-    open_draft_and_export(
-        project_name=project_name,
-        output_filename=output_filename,
-        output_dir=output_dir,
-        capcut_exe_path=capcut_exe_path,
-        progress_callback=progress_callback
-    )
+        ensure_capcut_running(capcut_exe_path)
+        time.sleep(2)
 
-    if progress_callback:
-        progress_callback(100, "Hoàn tất", f"Quy trình {mode_label} hoàn tất thành công: {output_filename}.mp4")
+        # 1. Auto Subtitles
+        if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":
+            trigger_capcut_auto_captions(osd_progress)
+            trigger_capcut_bilingual_translate(osd_progress)
+        else:
+            osd_progress(50, "Căn Chỉnh Sub", f"[{mode_label}] Nạp sub Tiếng Việt chuẩn ngữ cảnh và căn chỉnh vị trí hiển thị...")
+            time.sleep(1.5)
 
-    return True
+        # 2. Text to Speech Dubbing
+        if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":
+            trigger_capcut_text_to_speech(voice_name=vip_voice, sync_speed=sync_speed, progress_callback=osd_progress)
+        else:
+            osd_progress(75, "Lồng Tiếng Khớp Âm", f"[{mode_label}] Đồng bộ thời lượng câu thoại và giọng đọc lồng tiếng ăn khớp 100% với phụ đề...")
+            time.sleep(1.5)
+
+        # 3. Export Video via UI
+        open_draft_and_export(
+            project_name=project_name,
+            output_filename=output_filename,
+            output_dir=output_dir,
+            capcut_exe_path=capcut_exe_path,
+            progress_callback=osd_progress
+        )
+
+        osd_progress(100, "Hoàn tất", f"Quy trình {mode_label} hoàn tất thành công: {output_filename}.mp4")
+        osd.stop(f"Hoàn tất xuất video: {output_filename}.mp4", delay=2)
+        return True
+    except Exception as e:
+        osd.stop(f"Lỗi: {str(e)[:60]}", delay=3)
+        raise
