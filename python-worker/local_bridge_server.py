@@ -124,28 +124,15 @@ def worker_thread_loop():
 
         config_str = json.dumps(cfg, ensure_ascii=False)
 
-        # Decide whether to run compiled sidecar or python script
-        sidecar_exe = BASE_DIR / "src-tauri" / "bin" / "pipeline_worker-x86_64-pc-windows-msvc.exe"
-        if not sidecar_exe.exists():
-            sidecar_exe = BASE_DIR / "bin" / "pipeline_worker.exe"
-
-        if sidecar_exe.exists():
-            cmd = [
-                str(sidecar_exe),
-                "--task-id", str(task_id),
-                "--source", str(source),
-                "--output-dir", str(output_dir),
-                "--config", config_str
-            ]
-        else:
-            script_path = BASE_DIR / "python-worker" / "pipeline_worker.py"
-            cmd = [
-                sys.executable, str(script_path),
-                "--task-id", str(task_id),
-                "--source", str(source),
-                "--output-dir", str(output_dir),
-                "--config", config_str
-            ]
+        # Always execute live python pipeline script
+        script_path = BASE_DIR / "python-worker" / "pipeline_worker.py"
+        cmd = [
+            sys.executable, str(script_path),
+            "--task-id", str(task_id),
+            "--source", str(source),
+            "--output-dir", str(output_dir),
+            "--config", config_str
+        ]
 
         emit_live_log(f"[Video #{task_id}] Đang xử lý: {source}", "info")
 
@@ -578,7 +565,14 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                                 added.append(new_item)
                         continue
 
-                    name = Path(item_str).stem or f"Video_{base_id + idx}"
+                    if item_str.startswith("watch?v="):
+                        item_str = f"https://www.youtube.com/{item_str}"
+                    elif item_str.startswith("youtu.be/"):
+                        item_str = f"https://{item_str}"
+                    elif item_str.startswith("v.douyin.com/") or item_str.startswith("tiktok.com/"):
+                        item_str = f"https://{item_str}"
+
+                    name = Path(item_str.split("?")[0]).stem or f"Video_{base_id + idx}"
                     new_item = {
                         "id": base_id + idx,
                         "name": name,

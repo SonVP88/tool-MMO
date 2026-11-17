@@ -133,19 +133,30 @@ def seconds_to_ass_time(seconds: float) -> str:
 
 # ==================== STEP 1: DOWNLOAD / INPUT ====================
 def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data: str = None) -> Path:
-    emit_progress(task_id, 5, "Tải video", f"Chuẩn bị nguồn video: {source}")
+    source_clean = source.strip()
+    # Normalize common link patterns
+    if source_clean.startswith("watch?v="):
+        source_clean = f"https://www.youtube.com/{source_clean}"
+    elif source_clean.startswith("youtu.be/"):
+        source_clean = f"https://{source_clean}"
+    elif source_clean.startswith("v.douyin.com/") or source_clean.startswith("www.douyin.com/"):
+        source_clean = f"https://{source_clean}"
+    elif source_clean.startswith("tiktok.com/") or source_clean.startswith("www.tiktok.com/"):
+        source_clean = f"https://{source_clean}"
+
+    emit_progress(task_id, 5, "Tải video", f"Chuẩn bị nguồn video: {source_clean}")
     temp_dir.mkdir(parents=True, exist_ok=True)
     raw_video = temp_dir / f"input_raw_{task_id}.mp4"
 
     # Check if local file
     candidate_paths = [
-        Path(source),
-        BASE_DIR / source,
-        Path.cwd() / source,
-        BASE_DIR / "python-worker" / source,
-        BASE_DIR / "python-worker" / "temp" / Path(source).name,
-        BASE_DIR / "python-worker" / "temp" / "uploads" / Path(source).name,
-        BASE_DIR / "temp" / Path(source).name,
+        Path(source_clean),
+        BASE_DIR / source_clean,
+        Path.cwd() / source_clean,
+        BASE_DIR / "python-worker" / source_clean,
+        BASE_DIR / "python-worker" / "temp" / Path(source_clean).name,
+        BASE_DIR / "python-worker" / "temp" / "uploads" / Path(source_clean).name,
+        BASE_DIR / "temp" / Path(source_clean).name,
     ]
     for cand in candidate_paths:
         try:
@@ -157,8 +168,8 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
         except Exception:
             pass
 
-    # Is URL -> run yt-dlp
-    emit_progress(task_id, 10, "Tải video", f"[yt-dlp] Đang phân tích và tải link: {source}")
+    # Is URL -> run yt-dlp with android client bypass
+    emit_progress(task_id, 10, "Tải video", f"[yt-dlp] Đang phân tích và tải link: {source_clean}")
     try:
         import yt_dlp
         cookie_file = None
@@ -170,6 +181,11 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
         ydl_opts = {
             'outtmpl': str(raw_video.with_suffix('')) + '.%(ext)s',
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios']
+                }
+            },
             'quiet': True,
             'no_warnings': True,
         }
@@ -177,7 +193,7 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
             ydl_opts['cookiefile'] = str(cookie_file)
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([source])
+            ydl.download([source_clean])
 
         # Find downloaded file
         matching = list(temp_dir.glob(f"input_raw_{task_id}.*"))
@@ -185,10 +201,10 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
             raw_video = matching[0]
             emit_progress(task_id, 20, "Tải video", f"Tải hoàn tất: {raw_video.name}")
             return raw_video
-        raise RuntimeError(f"yt-dlp không tải được video từ: {source}")
+        raise RuntimeError(f"yt-dlp không tải được video từ: {source_clean}")
     except Exception as e:
         emit_progress(task_id, 15, "Tải video", f"Lỗi tải video: {str(e)[:100]}")
-        raise RuntimeError(f"Không thể mở hoặc tải video từ nguồn: '{source}'. Chi tiết lỗi: {str(e)[:120]}")
+        raise RuntimeError(f"Không thể mở hoặc tải video từ nguồn: '{source_clean}'. Chi tiết lỗi: {str(e)[:120]}")
 
 # ==================== STEP 2: EXTRACT AUDIO & ASR (GROQ / GEMINI) ====================
 def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, groq_key: str = None, gemini_key: str = None) -> list:
