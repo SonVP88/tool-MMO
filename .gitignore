@@ -33,5 +33,6 @@ src-tauri/target/
 
 # Local configs with secrets
 config/settings.json
+config/tasks.json
 temp/
 *.zip
