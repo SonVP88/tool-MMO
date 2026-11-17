@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "app": "python run_desktop_app.py",
     "build": "tsc -b && vite build",
     "tauri": "tauri",
     "build:sidecar": "python -m PyInstaller --onefile --noconsole --name pipeline_worker-x86_64-pc-windows-msvc --distpath src-tauri/bin --workpath dist/build_sidecar --specpath dist/specs python-worker/pipeline_worker.py",
