@@ -142,35 +142,68 @@ export const BatchSettingsForm: React.FC = () => {
           </div>
         )}
 
-        {/* CapCut VIP Voice Configuration for Pro Modes */}
+        {/* CapCut Account Type & Voice Configuration */}
         {settings.aiEngineMode !== 'CLOUD_LOCAL' && (
-          <div className="pt-1.5 border-t border-[#1e2a3c] grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] text-slate-400 block mb-0.5 font-medium">Giọng VIP CapCut Pro:</label>
-              <select
-                value={settings.capcutVipVoice || 'Cô Gái Hoạt Ngôn'}
-                onChange={(e) => updateSettings({ capcutVipVoice: e.target.value })}
-                className="w-full bg-[#111722] border border-[#233145] rounded px-2 py-1 text-[11px] text-amber-300 font-semibold focus:outline-none"
-              >
-                <option value="Cô Gái Hoạt Ngôn">Cô Gái Hoạt Ngôn (Nữ VIP)</option>
-                <option value="Nam Trầm Ấm">Nam Trầm Ấm (Nam VIP)</option>
-                <option value="Thanh Niên Tự Tin">Thanh Niên Tự Tin (Nam Trẻ)</option>
-                <option value="Review Phim Hài">Review Phim Hài (Kể Chuyện)</option>
-                <option value="Chị Google">Chị Google (Truyền Thống)</option>
-                <option value="Nữ MC Tin Tức">Nữ MC Tin Tức (Trang Trọng)</option>
-              </select>
+          <div className="pt-1.5 border-t border-[#1e2a3c] space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-0.5 font-medium">Tài khoản CapCut:</label>
+                <select
+                  value={settings.capcutAccountType || 'PRO'}
+                  onChange={(e) => updateSettings({ capcutAccountType: e.target.value as any })}
+                  className="w-full bg-[#111722] border border-[#233145] rounded px-2 py-1 text-[11px] text-amber-300 font-semibold focus:outline-none"
+                >
+                  <option value="PRO">👑 CapCut PRO (Dùng Full VIP)</option>
+                  <option value="FREE">🆓 CapCut Thường (Tự tránh VIP để xuất mượt)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-0.5 font-medium">
+                  {settings.capcutAccountType === 'FREE' ? 'Giọng đọc tự nhiên:' : 'Giọng đọc VIP CapCut:'}
+                </label>
+                <select
+                  value={settings.capcutVipVoice || 'Cô Gái Hoạt Ngôn'}
+                  onChange={(e) => updateSettings({ capcutVipVoice: e.target.value })}
+                  className="w-full bg-[#111722] border border-[#233145] rounded px-2 py-1 text-[11px] text-amber-300 font-semibold focus:outline-none"
+                >
+                  {settings.capcutAccountType === 'FREE' ? (
+                    <>
+                      <option value="Cô Gái Hoạt Ngôn (Free)">Cô Gái Hoạt Ngôn (Tự Nhiên)</option>
+                      <option value="Nam Miền Bắc Trầm Ấm">Nam Trầm Ấm (Chuẩn)</option>
+                      <option value="Nam Miền Nam Truyền Cảm">Nam Truyền Cảm</option>
+                      <option value="Chị Google">Chị Google (Chuẩn)</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Cô Gái Hoạt Ngôn">Cô Gái Hoạt Ngôn (Nữ VIP)</option>
+                      <option value="Nam Trầm Ấm">Nam Trầm Ấm (Nam VIP)</option>
+                      <option value="Thanh Niên Tự Tin">Thanh Niên Tự Tin (Nam Trẻ)</option>
+                      <option value="Review Phim Hài">Review Phim Hài (Kể Chuyện)</option>
+                      <option value="Chị Google">Chị Google (Truyền Thống)</option>
+                      <option value="Nữ MC Tin Tức">Nữ MC Tin Tức (Trang Trọng)</option>
+                    </>
+                  )}
+                </select>
+              </div>
             </div>
-            <div className="flex items-center gap-2 pt-3">
-              <input
-                type="checkbox"
-                id="syncSpeed"
-                checked={settings.capcutSyncSpeed !== false}
-                onChange={(e) => updateSettings({ capcutSyncSpeed: e.target.checked })}
-                className="rounded border-[#26354a] bg-[#0f141c] text-emerald-500 focus:ring-0 cursor-pointer"
-              />
-              <label htmlFor="syncSpeed" className="text-[11px] text-slate-300 cursor-pointer select-none">
-                Đồng bộ tốc độ đọc với Sub
-              </label>
+
+            <div className="flex items-center justify-between pt-0.5 text-[10px]">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  id="syncSpeed"
+                  checked={settings.capcutSyncSpeed !== false}
+                  onChange={(e) => updateSettings({ capcutSyncSpeed: e.target.checked })}
+                  className="rounded border-[#26354a] bg-[#0f141c] text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="syncSpeed" className="text-slate-300 cursor-pointer select-none">
+                  Đồng bộ tốc độ giọng đọc ăn khớp 100% với phụ đề
+                </label>
+              </div>
+              <span className="text-slate-500 italic">
+                {settings.capcutAccountType === 'FREE' ? 'Tự động tránh trả phí' : 'Không giới hạn tính năng'}
+              </span>
             </div>
           </div>
         )}

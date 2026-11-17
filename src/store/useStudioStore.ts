@@ -218,6 +218,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     strokeColor: '#000000',
     renderEngine: 'FFmpeg Siêu Tốc (Chạy ngầm 100%)',
     aiEngineMode: 'CAPCUT_PRO_NATIVE',
+    capcutAccountType: 'PRO',
     capcutVipVoice: 'Cô Gái Hoạt Ngôn',
     capcutSyncSpeed: true,
     capcutDraftDir: '%LOCALAPPDATA%\\CapCut\\User Data\\Projects\\com.lveditor.draft',

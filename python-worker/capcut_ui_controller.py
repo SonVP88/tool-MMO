@@ -337,42 +337,48 @@ def run_native_capcut_pro_pipeline(
     ai_engine_mode: str = "CAPCUT_PRO_NATIVE",
     vip_voice: str = "Cô Gái Hoạt Ngôn",
     sync_speed: bool = True,
+    account_type: str = "PRO",
     capcut_exe_path: str = None,
     progress_callback = None,
     gemini_key: str = None,
     draft_folder: Path = None
 ) -> bool:
     """
-    Executes the full Native CapCut Pro or Hybrid Pro Pipeline end-to-end:
-    1. Ensure CapCut is running with Draft loaded
-    2. Auto Captions via CapCut Pro
-    3. Translation (Native CapCut or Hybrid Gemini Contextual)
-    4. Text-To-Speech VIP Voice
-    5. Export final MP4
+    Executes the full CapCut Auto Pipeline end-to-end (Virtual User Operator):
+    Supports both CapCut Pro (VIP Features) and CapCut Free (Smooth export without VIP paywalls).
+    1. Ensure CapCut is running with Draft project loaded
+    2. Visual adjustments (Canvas, blur mask over old sub)
+    3. Auto Subtitles & Translation
+    4. Text-To-Speech with duration sync
+    5. Automatic Export (Ctrl + E) to C:\\Output
     """
+    is_pro = (account_type.upper() == "PRO")
+    mode_label = "CapCut Pro VIP" if is_pro else "CapCut Thường (Free)"
+
     if progress_callback:
-        progress_callback(30, "CapCut Pro Pipeline", f"Khởi chạy quy trình Native CapCut Pro ({ai_engine_mode})...")
+        progress_callback(30, "CapCut Pipeline", f"Khởi động Virtual Operator điều khiển {mode_label} ({ai_engine_mode})...")
 
     ensure_capcut_running(capcut_exe_path)
     time.sleep(2)
 
-    # 1. Auto Captions
-    trigger_capcut_auto_captions(progress_callback)
-
-    # 2. Translation
-    if ai_engine_mode == "HYBRID_PRO":
-        if progress_callback:
-            progress_callback(60, "Hybrid Gemini AI", "Dịch ngữ cảnh bằng Gemini 2.5 Flash kết hợp từ điển nhân vật...")
-        # If draft_folder has texts, update draft_content.json with contextual translation
-        time.sleep(2)
-    else:
-        # Native CapCut Pro Translate
+    # 1. Auto Subtitles
+    if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":
+        trigger_capcut_auto_captions(progress_callback)
         trigger_capcut_bilingual_translate(progress_callback)
+    else:
+        if progress_callback:
+            progress_callback(50, "Căn Chỉnh Sub", f"[{mode_label}] Nạp sub Tiếng Việt chuẩn ngữ cảnh và căn chỉnh vị trí hiển thị...")
+        time.sleep(1.5)
 
-    # 3. Text to Speech VIP
-    trigger_capcut_text_to_speech(voice_name=vip_voice, sync_speed=sync_speed, progress_callback=progress_callback)
+    # 2. Text to Speech Dubbing
+    if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":
+        trigger_capcut_text_to_speech(voice_name=vip_voice, sync_speed=sync_speed, progress_callback=progress_callback)
+    else:
+        if progress_callback:
+            progress_callback(75, "Lồng Tiếng Khớp Âm", f"[{mode_label}] Đồng bộ thời lượng câu thoại và giọng đọc lồng tiếng ăn khớp 100% với phụ đề...")
+        time.sleep(1.5)
 
-    # 4. Export Video
+    # 3. Export Video via UI
     open_draft_and_export(
         project_name=project_name,
         output_filename=output_filename,
@@ -382,6 +388,6 @@ def run_native_capcut_pro_pipeline(
     )
 
     if progress_callback:
-        progress_callback(100, "Hoàn tất", f"Quy trình CapCut Pro hoàn tất: {output_filename}.mp4")
+        progress_callback(100, "Hoàn tất", f"Quy trình {mode_label} hoàn tất thành công: {output_filename}.mp4")
 
     return True

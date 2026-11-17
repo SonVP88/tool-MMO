@@ -714,8 +714,9 @@ def main():
 
             vip_voice = settings.get("capcutVipVoice", "Cô Gái Hoạt Ngôn")
             sync_speed = settings.get("capcutSyncSpeed", True)
+            account_type = settings.get("capcutAccountType", "PRO")
 
-            # Step 3, 4, 5: UI Automation (Auto Sub, VIP Voice Sync, Export)
+            # Step 3, 4, 5: UI Automation (Auto Sub, Voice Sync, Export)
             run_native_capcut_pro_pipeline(
                 project_name=f"Reup_{task_id}",
                 output_filename=f"Reup_{task_id}",
@@ -723,6 +724,7 @@ def main():
                 ai_engine_mode=ai_engine_mode,
                 vip_voice=vip_voice,
                 sync_speed=sync_speed,
+                account_type=account_type,
                 capcut_exe_path=custom_capcut_exe,
                 progress_callback=lambda p, s, m: emit_progress(task_id, p, s, m),
                 gemini_key=gemini_key,

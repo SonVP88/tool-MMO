@@ -47,6 +47,7 @@ export interface BatchSettings {
   strokeColor: string;
   renderEngine: string;
   aiEngineMode?: 'CAPCUT_PRO_NATIVE' | 'HYBRID_PRO' | 'CLOUD_LOCAL';
+  capcutAccountType?: 'PRO' | 'FREE';
   capcutVipVoice?: string;
   capcutSyncSpeed?: boolean;
   capcutDraftDir: string;
