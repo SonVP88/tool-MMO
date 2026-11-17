@@ -253,17 +253,23 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
                     segments = json_data.get("segments", [])
                     if segments:
                         subtitles = []
-                        for idx, s in enumerate(segments):
+                        for s in segments:
                             txt = s.get("text", "").strip()
-                            if txt:
+                            clean_txt = re.sub(r'^[.\s,!?…–—\-~_#*♪♩♫♬\(\)\[\]{}«»"\'`]+$', '', txt).strip()
+                            no_speech = float(s.get("no_speech_prob", 0.0))
+                            if clean_txt and no_speech < 0.65:
                                 subtitles.append({
-                                    "index": idx + 1,
+                                    "index": len(subtitles) + 1,
                                     "start": round(float(s.get("start", 0.0)), 2),
                                     "end": round(float(s.get("end", 2.0)), 2),
-                                    "text": txt
+                                    "text": clean_txt
                                 })
-                        emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế từ Whisper.")
-                        return subtitles
+                        if subtitles:
+                            emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế từ Whisper.")
+                            return subtitles
+                        else:
+                            emit_progress(task_id, 40, "Lấy phụ đề", "Whisper xác nhận: Video không có lời thoại người nói (chỉ có nhạc nền hoặc im lặng).")
+                            return []
                 else:
                     emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper HTTP {res.status_code}: {res.text[:80]}")
         except Exception as e:
@@ -304,16 +310,23 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
                 parsed = json.loads(raw_text.strip())
                 if isinstance(parsed, list):
                     subtitles = []
-                    for idx, s in enumerate(parsed):
+                    for s in parsed:
                         if isinstance(s, dict) and s.get("text"):
-                            subtitles.append({
-                                "index": idx + 1,
-                                "start": round(float(s.get("start", 0.0)), 2),
-                                "end": round(float(s.get("end", 2.0)), 2),
-                                "text": str(s.get("text", "")).strip()
-                            })
-                    emit_progress(task_id, 40, "Lấy phụ đề", f"Gemini 2.5 Flash nhận diện thành công {len(subtitles)} câu thoại thực tế.")
-                    return subtitles
+                            raw_t = str(s.get("text", "")).strip()
+                            clean_t = re.sub(r'^[.\s,!?…–—\-~_#*♪♩♫♬\(\)\[\]{}«»"\'`]+$', '', raw_t).strip()
+                            if clean_t:
+                                subtitles.append({
+                                    "index": len(subtitles) + 1,
+                                    "start": round(float(s.get("start", 0.0)), 2),
+                                    "end": round(float(s.get("end", 2.0)), 2),
+                                    "text": clean_t
+                                })
+                    if subtitles:
+                        emit_progress(task_id, 40, "Lấy phụ đề", f"Gemini 2.5 Flash nhận diện thành công {len(subtitles)} câu thoại thực tế.")
+                        return subtitles
+                    else:
+                        emit_progress(task_id, 40, "Lấy phụ đề", "Gemini xác nhận: Video không có lời thoại người nói (chỉ có nhạc hoặc im lặng).")
+                        return []
             else:
                 emit_progress(task_id, 35, "Lấy phụ đề", f"Gemini Audio ASR HTTP {res.status_code}: {res.text[:80]}")
         except Exception as e:
@@ -378,6 +391,10 @@ async def generate_edge_tts_async(text: str, voice: str, rate_str: str, out_path
     await communicate.save(str(out_path))
 
 def step_tts_synthesis(task_id: int, subtitles: list, temp_dir: Path, voice_name: str, speed: float) -> Path:
+    if not subtitles:
+        emit_progress(task_id, 75, "Tạo giọng đọc", "Video không có lời thoại, bỏ qua bước lồng tiếng AI.")
+        return None
+
     emit_progress(task_id, 65, "Tạo giọng đọc", f"Khởi tạo Edge-TTS lồng tiếng ({voice_name})...")
 
     # Map friendly voice name to Microsoft neural voice tag
