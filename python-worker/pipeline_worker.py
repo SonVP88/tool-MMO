@@ -185,25 +185,16 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
             raw_video = matching[0]
             emit_progress(task_id, 20, "Tải video", f"Tải hoàn tất: {raw_video.name}")
             return raw_video
+        raise RuntimeError(f"yt-dlp không tải được video từ: {source}")
     except Exception as e:
-        emit_progress(task_id, 15, "Tải video", f"yt-dlp thông báo: {str(e)[:100]}. Dùng video mẫu để tiếp tục pipeline.")
-    
-    # Fallback placeholder video generation via ffmpeg if download failed
-    ffmpeg_exe = get_ffmpeg_path()
-    cmd = [
-        ffmpeg_exe, "-y",
-        "-f", "lavfi", "-i", "color=c=0x151c27:s=1280x720:d=10",
-        "-f", "lavfi", "-i", "sine=f=1000:d=10",
-        "-c:v", "libx264", "-c:a", "aac", str(raw_video)
-    ]
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    emit_progress(task_id, 20, "Tải video", "Khởi tạo khung video hoàn tất.")
-    return raw_video
+        emit_progress(task_id, 15, "Tải video", f"Lỗi tải video: {str(e)[:100]}")
+        raise RuntimeError(f"Không thể mở hoặc tải video từ nguồn: '{source}'. Chi tiết lỗi: {str(e)[:120]}")
 
-# ==================== STEP 2: EXTRACT AUDIO & ASR WHISPER ====================
-def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, groq_key: str = None) -> list:
+# ==================== STEP 2: EXTRACT AUDIO & ASR (GROQ / GEMINI) ====================
+def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, groq_key: str = None, gemini_key: str = None) -> list:
     emit_progress(task_id, 25, "Lấy phụ đề", "Tách dải âm thanh từ video gốc...")
     audio_wav = temp_dir / f"extracted_{task_id}.wav"
+    audio_mp3 = temp_dir / f"extracted_{task_id}.mp3"
     ffmpeg_exe = get_ffmpeg_path()
 
     cmd = [
@@ -214,13 +205,25 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
     ]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    emit_progress(task_id, 32, "Lấy phụ đề", "Đang nhận diện giọng nói (ASR Groq Whisper large-v3)...")
+    if not audio_wav.exists() or audio_wav.stat().st_size < 100:
+        emit_progress(task_id, 40, "Lấy phụ đề", "Video không chứa âm thanh, bỏ qua bước nhận diện giọng nói.")
+        return []
 
-    # If Groq Key available, call Groq Whisper API
-    if groq_key and len(groq_key) > 10 and not groq_key.startswith("gsk_mock"):
+    # Encode compressed mp3 for Gemini audio upload
+    cmd_mp3 = [
+        ffmpeg_exe, "-y",
+        "-i", str(audio_wav),
+        "-b:a", "64k",
+        str(audio_mp3)
+    ]
+    subprocess.run(cmd_mp3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # 1. Try Groq Whisper large-v3 if groq_key provided
+    if groq_key and len(groq_key.strip()) > 10 and not groq_key.startswith("gsk_mock"):
+        emit_progress(task_id, 32, "Lấy phụ đề", "Đang nhận diện giọng nói (ASR Groq Whisper large-v3)...")
         try:
             import requests
-            headers = {"Authorization": f"Bearer {groq_key}"}
+            headers = {"Authorization": f"Bearer {groq_key.strip()}"}
             with open(audio_wav, "rb") as f:
                 files = {"file": (audio_wav.name, f, "audio/wav")}
                 data = {
@@ -228,96 +231,129 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
                     "response_format": "verbose_json",
                     "temperature": 0.0
                 }
-                res = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=60)
+                res = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=90)
                 if res.status_code == 200:
                     json_data = res.json()
                     segments = json_data.get("segments", [])
                     if segments:
                         subtitles = []
                         for idx, s in enumerate(segments):
+                            txt = s.get("text", "").strip()
+                            if txt:
+                                subtitles.append({
+                                    "index": idx + 1,
+                                    "start": round(float(s.get("start", 0.0)), 2),
+                                    "end": round(float(s.get("end", 2.0)), 2),
+                                    "text": txt
+                                })
+                        emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu thoại thực tế từ Whisper.")
+                        return subtitles
+                else:
+                    emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper HTTP {res.status_code}: {res.text[:80]}")
+        except Exception as e:
+            emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper thông báo: {str(e)[:80]}. Chuyển sang Gemini...")
+
+    # 2. Try Gemini 2.5 Flash Audio Transcription if gemini_key provided
+    if gemini_key and len(gemini_key.strip()) > 10 and not gemini_key.startswith("AIzaSyD-mock"):
+        emit_progress(task_id, 34, "Lấy phụ đề", "Đang nhận diện giọng nói và mốc thời gian qua Gemini 2.5 Flash Audio...")
+        try:
+            import requests, base64
+            target_audio = audio_mp3 if audio_mp3.exists() else audio_wav
+            with open(target_audio, "rb") as af:
+                b64_audio = base64.b64encode(af.read()).decode("utf-8")
+
+            mime = "audio/mp3" if audio_mp3.exists() else "audio/wav"
+            prompt_text = (
+                "Bạn là trợ lý ASR chuyên nghiệp. Hãy lắng nghe toàn bộ file âm thanh này và xuất tất cả các câu hội thoại có trong video kèm timestamp thời gian (tính bằng giây).\n"
+                "Trả về DUY NHẤT một chuỗi JSON hợp lệ theo định dạng mảng (không dùng markdown code block, không thêm lời chào):\n"
+                "[{\"index\": 1, \"start\": 0.0, \"end\": 2.5, \"text\": \"câu nói gốc trong video\"}]\n"
+                "Nếu file âm thanh hoàn toàn không có lời thoại (chỉ có nhạc hoặc im lặng), trả về: []"
+            )
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key.strip()}"
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt_text},
+                        {"inline_data": {"mime_type": mime, "data": b64_audio}}
+                    ]
+                }]
+            }
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=90)
+            if res.status_code == 200:
+                resp_json = res.json()
+                raw_text = resp_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                if raw_text.startswith("```"):
+                    raw_text = re.sub(r"^```(?:json)?\n?", "", raw_text)
+                    raw_text = re.sub(r"\n?```$", "", raw_text)
+                parsed = json.loads(raw_text.strip())
+                if isinstance(parsed, list):
+                    subtitles = []
+                    for idx, s in enumerate(parsed):
+                        if isinstance(s, dict) and s.get("text"):
                             subtitles.append({
                                 "index": idx + 1,
-                                "start": s.get("start", 0.0),
-                                "end": s.get("end", 2.0),
-                                "text": s.get("text", "").strip()
+                                "start": round(float(s.get("start", 0.0)), 2),
+                                "end": round(float(s.get("end", 2.0)), 2),
+                                "text": str(s.get("text", "")).strip()
                             })
-                        emit_progress(task_id, 40, "Lấy phụ đề", f"Nhận diện thành công {len(subtitles)} câu hội thoại từ Whisper.")
-                        return subtitles
+                    emit_progress(task_id, 40, "Lấy phụ đề", f"Gemini 2.5 Flash nhận diện thành công {len(subtitles)} câu thoại thực tế.")
+                    return subtitles
+            else:
+                emit_progress(task_id, 35, "Lấy phụ đề", f"Gemini Audio ASR HTTP {res.status_code}: {res.text[:80]}")
         except Exception as e:
-            emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper: {str(e)[:80]}. Chuyển sang trích xuất nâng cao.")
+            emit_progress(task_id, 35, "Lấy phụ đề", f"Gemini Audio: {str(e)[:80]}")
 
-    # High quality mock/fallback segments for continuous workflow testing
-    subtitles = [
-        {"index": 1, "start": 0.5, "end": 2.8, "text": "第十七集 萧炎再入魔兽山脉"},
-        {"index": 2, "start": 3.0, "end": 5.4, "text": "为了寻找炼制七品丹药的珍稀药材"},
-        {"index": 3, "start": 5.6, "end": 7.8, "text": "他独自面对潜伏在迷雾中的远古凶兽"},
-        {"index": 4, "start": 8.0, "end": 10.0, "text": "这一次，异火的力量将再次爆发！"},
-    ]
-    emit_progress(task_id, 40, "Lấy phụ đề", f"Đã trích xuất xong {len(subtitles)} câu phụ đề gốc.")
-    return subtitles
+    # 3. No API key configured
+    raise RuntimeError(
+        "Chưa cấu hình API Key nhận diện giọng nói! Vui lòng vào mục 'Cấu Hình API Dịch' trên giao diện để nhập Gemini API Key hoặc Groq API Key thật."
+    )
 
 # ==================== STEP 3: GEMINI TRANSLATION ====================
 def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: str, gemini_key: str = None) -> list:
-    emit_progress(task_id, 45, "Dịch AI", f"Gửi ngữ cảnh dịch thuật lên Gemini 2.5 Flash (Thể loại: {genre})...")
+    if not subtitles:
+        emit_progress(task_id, 50, "Dịch AI", "Không có câu thoại nào trong video cần dịch.")
+        return []
 
-    # Character dictionary sync
-    char_dict = {
-        "萧炎": "Tiêu Viêm",
-        "药老": "Dược Lão",
-        "魔兽山脉": "Ma Thú Sơn Mạch",
-        "异火": "Dị Hỏa",
-        "丹药": "Đan dược"
-    }
+    emit_progress(task_id, 45, "Dịch AI", f"Gửi {len(subtitles)} câu thoại lên Gemini 2.5 Flash để dịch ngữ cảnh (Thể loại: {genre})...")
 
-    # If Gemini Key available, call Gemini Flash API
-    if gemini_key and len(gemini_key) > 10 and not gemini_key.startswith("AIzaSyD-mock"):
-        try:
-            import requests
-            lines_prompt = "\n".join([f"[{s['index']}] {s['text']}" for s in subtitles])
-            prompt = (
-                f"Bạn là chuyên gia dịch thuật video thể loại {genre} ({quality}).\n"
-                f"Hãy dịch các câu sau sang tiếng Việt tự nhiên, giữ nguyên cấu trúc [index] và nghĩa gốc:\n"
-                f"Từ điển tên riêng: {json.dumps(char_dict, ensure_ascii=False)}\n"
-                f"{lines_prompt}\n"
-                f"Chỉ trả về các dòng dạng: [index] Bản dịch tiếng Việt"
-            )
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}]
-            }
-            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
-            if res.status_code == 200:
-                resp_json = res.json()
-                text_out = resp_json['candidates'][0]['content']['parts'][0]['text']
-                # parse output lines
-                pattern = re.compile(r'\[(\d+)\]\s*(.+)')
-                translated_map = {}
-                for line in text_out.split('\n'):
-                    m = pattern.search(line.strip())
-                    if m:
-                        idx = int(m.group(1))
-                        translated_map[idx] = m.group(2).strip()
+    if not gemini_key or len(gemini_key.strip()) <= 10 or gemini_key.startswith("AIzaSyD-mock"):
+        raise RuntimeError(
+            "Chưa cấu hình Gemini API Key để dịch thuật! Vui lòng mở mục 'Cấu Hình API Dịch' trên giao diện và dán Gemini API Key thật của bạn."
+        )
 
-                for s in subtitles:
-                    if s['index'] in translated_map:
-                        s['trans'] = translated_map[s['index']]
-                emit_progress(task_id, 58, "Dịch AI", f"Gemini hoàn tất dịch {len(subtitles)} câu chuẩn ngữ cảnh.")
-                return subtitles
-        except Exception as e:
-            emit_progress(task_id, 50, "Dịch AI", f"Gemini API: {str(e)[:80]}. Sử dụng bản dịch tối ưu.")
+    try:
+        import requests
+        lines_prompt = "\n".join([f"[{s['index']}] {s['text']}" for s in subtitles])
+        prompt = (
+            f"Bạn là chuyên gia dịch thuật video thể loại {genre} ({quality}).\n"
+            f"Hãy dịch các câu thoại sau sang tiếng Việt tự nhiên, giữ nguyên cấu trúc [index] và nghĩa gốc:\n"
+            f"{lines_prompt}\n"
+            f"Chỉ trả về các dòng dạng: [index] Bản dịch tiếng Việt"
+        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key.strip()}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}]
+        }
+        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
+        if res.status_code == 200:
+            resp_json = res.json()
+            text_out = resp_json['candidates'][0]['content']['parts'][0]['text']
+            pattern = re.compile(r'\[(\d+)\]\s*(.+)')
+            translated_map = {}
+            for line in text_out.split('\n'):
+                m = pattern.search(line.strip())
+                if m:
+                    idx = int(m.group(1))
+                    translated_map[idx] = m.group(2).strip()
 
-    # High quality localized translation fallback
-    translations = [
-        "Tập 17: Tiêu Viêm một lần nữa tiến vào Ma Thú Sơn Mạch.",
-        "Để tìm kiếm dược liệu quý hiếm luyện chế thất phẩm đan dược.",
-        "Hắn một mình đối mặt với hung thú cổ xưa ẩn mình trong làn sương mù.",
-        "Lần này, uy lực của Dị Hỏa sẽ một lần nữa bùng nổ đỉnh cao!"
-    ]
-    for idx, s in enumerate(subtitles):
-        s['trans'] = translations[idx % len(translations)]
-
-    emit_progress(task_id, 60, "Dịch AI", f"Hoàn tất dịch {len(subtitles)} câu sang Tiếng Việt chuẩn xác.")
-    return subtitles
+            for s in subtitles:
+                s['trans'] = translated_map.get(s['index'], s.get('text', ''))
+            emit_progress(task_id, 60, "Dịch AI", f"Gemini hoàn tất dịch {len(subtitles)} câu thoại sang Tiếng Việt chuẩn xác.")
+            return subtitles
+        else:
+            raise RuntimeError(f"Gemini API phản hồi mã lỗi HTTP {res.status_code}: {res.text[:120]}")
+    except Exception as e:
+        raise RuntimeError(f"Lỗi gọi Gemini 2.5 Flash API: {str(e)[:150]}")
 
 # ==================== STEP 4: EDGE-TTS VOICE SYNTHESIS ====================
 async def generate_edge_tts_async(text: str, voice: str, rate_str: str, out_path: Path):
@@ -472,31 +508,66 @@ def step_render_video(
     enc_name, enc_flags, enc_label = detect_gpu_encoder(ffmpeg_exe)
     emit_progress(task_id, 90, "Render video", f"Tăng tốc phần cứng FFmpeg: {enc_label}")
 
-    cmd = [
-        ffmpeg_exe, "-y",
-        "-i", str(raw_video),
-        "-i", str(voice_wav),
-        "-filter_complex", filter_complex,
-        "-map", "[vout]",
-        "-map", "[aout]",
-    ] + enc_flags + [
-        "-c:a", "aac",
-        str(final_output)
-    ]
+    if subtitles and voice_wav and voice_wav.exists():
+        filter_complex = (
+            f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_luma}:1:{blur_chroma}:1[blurred];"
+            f"[0:v][blurred]overlay=x={bx}:y={by}[vblurred];"
+            f"[vblurred]subtitles=filename='{srt_rel}':force_style='FontSize={font_size},PrimaryColour={text_color_ass},OutlineColour={stroke_color_ass},MarginV={margin_v}'[vout];"
+            f"[0:a]volume={orig_vol}[a_orig];[1:a]volume={voice_vol}[a_tts];[a_orig][a_tts]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+        )
+        cmd = [
+            ffmpeg_exe, "-y",
+            "-i", str(raw_video),
+            "-i", str(voice_wav),
+            "-filter_complex", filter_complex,
+            "-map", "[vout]",
+            "-map", "[aout]",
+        ] + enc_flags + [
+            "-c:a", "aac", "-b:a", "192k",
+            str(final_output)
+        ]
+    else:
+        filter_complex = (
+            f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_luma}:1:{blur_chroma}:1[blurred];"
+            f"[0:v][blurred]overlay=x={bx}:y={by}[vout]"
+        )
+        cmd = [
+            ffmpeg_exe, "-y",
+            "-i", str(raw_video),
+            "-filter_complex", filter_complex,
+            "-map", "[vout]",
+            "-map", "0:a?",
+        ] + enc_flags + [
+            "-c:a", "copy",
+            str(final_output)
+        ]
 
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if not final_output.exists() or final_output.stat().st_size == 0:
         # Fallback to libx264 if hardware encoder failed
-        cmd_fallback = [
-            ffmpeg_exe, "-y",
-            "-i", str(raw_video),
-            "-i", str(voice_wav),
-            "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vout];[1:a]volume={voice_vol}[aout]",
-            "-map", "[vout]", "-map", "[aout]",
-            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            str(final_output)
-        ]
+        if subtitles and voice_wav and voice_wav.exists():
+            cmd_fallback = [
+                ffmpeg_exe, "-y",
+                "-i", str(raw_video),
+                "-i", str(voice_wav),
+                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vblurred];[vblurred]subtitles=filename='{srt_rel}'[vout];[0:a]volume={orig_vol}[a_orig];[1:a]volume={voice_vol}[a_tts];[a_orig][a_tts]amix=inputs=2:duration=first[aout]",
+                "-map", "[vout]",
+                "-map", "[aout]",
+                "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                str(final_output)
+            ]
+        else:
+            cmd_fallback = [
+                ffmpeg_exe, "-y",
+                "-i", str(raw_video),
+                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vout]",
+                "-map", "[vout]",
+                "-map", "0:a?",
+                "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                "-c:a", "copy",
+                str(final_output)
+            ]
         subprocess.run(cmd_fallback, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     emit_progress(task_id, 98, "Render video", f"Tạo file thành công ({enc_name}): {final_output.name}")
@@ -581,7 +652,7 @@ def main():
             return
 
         # Step 2: Extract & ASR (For Cloud / Local mode)
-        subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key)
+        subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key, gemini_key)
 
         # Step 3: Contextual Translation
         genre = settings.get("genre", "Tự động")

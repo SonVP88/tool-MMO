@@ -173,73 +173,22 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     },
   ],
 
-  tasks: [
-    {
-      id: 17,
-      name: '17',
-      stage: 'Hoàn tất',
-      progress: 100,
-      status: 'DONE',
-      note: 'Render hoàn tất không lỗi',
-      outputPath: 'C:\\Output\\Reup_17.mp4',
-      selected: false,
-    },
-    {
-      id: 18,
-      name: '18',
-      stage: 'Hoàn tất',
-      progress: 100,
-      status: 'DONE',
-      note: 'Render hoàn tất không lỗi',
-      outputPath: 'C:\\Output\\Reup_18.mp4',
-      selected: false,
-    },
-    {
-      id: 19,
-      name: '19',
-      stage: 'Hoàn tất',
-      progress: 100,
-      status: 'DONE',
-      note: 'Render hoàn tất không lỗi',
-      outputPath: 'C:\\Output\\Reup_19.mp4',
-      selected: false,
-    },
-    {
-      id: 20,
-      name: '20',
-      stage: 'Lấy phụ đề',
-      progress: 28,
-      status: 'SUBTITLE',
-      note: 'Đang trích xuất audio & chạy Whisper...',
-      outputPath: 'C:\\Output\\Reup_20.mp4',
-      selected: true,
-    },
-    {
-      id: 21,
-      name: '21',
-      stage: 'Chờ chạy',
-      progress: 0,
-      status: 'WAITING',
-      note: 'Nằm trong hàng đợi tiến trình',
-      outputPath: 'C:\\Output\\Reup_21.mp4',
-      selected: false,
-    },
-  ],
+  tasks: [],
 
   filterTab: 'ALL',
   isRunning: false,
   isPaused: false,
   globalProgress: {
-    processed: 3,
-    total: 5,
-    percent: 65.6,
-    estimatedTime: '4m 30s',
+    processed: 0,
+    total: 0,
+    percent: 0,
+    estimatedTime: '0s',
   },
 
-  currentVideoId: 17,
+  currentVideoId: 0,
   isPlaying: false,
   currentTime: 0,
-  duration: 268,
+  duration: 0,
 
   oldSubBlurBox: {
     x: 18,
@@ -277,39 +226,9 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   logs: [
     {
-      id: '1',
-      timestamp: '11:28:10',
-      message: 'Khởi tạo Studio MMO Core v2.2.1 kết nối thành công.',
-      type: 'info',
-    },
-    {
-      id: '2',
-      timestamp: '11:28:45',
-      message: '[Video 17] Tải xong, xử lý phụ đề và lồng tiếng hoàn tất.',
-      type: 'success',
-    },
-    {
-      id: '3',
-      timestamp: '11:29:20',
-      message: '[Video 18] Render hoàn tất: C:\\Output\\Reup_18.mp4',
-      type: 'success',
-    },
-    {
-      id: '4',
-      timestamp: '11:30:05',
-      message: '[Video 19] Gộp audio Edge-TTS và đóng dấu sub thành công.',
-      type: 'success',
-    },
-    {
-      id: '5',
-      timestamp: '11:30:50',
-      message: '[Video 20] Bắt đầu tách giọng nói: Whisper Groq API (vi-VN)...',
-      type: 'info',
-    },
-    {
-      id: '6',
-      timestamp: '11:31:09',
-      message: 'Đã tự động lưu cấu hình profile "Mặc định".',
+      id: 'init-1',
+      timestamp: new Date().toLocaleTimeString('vi-VN', { hour12: false }),
+      message: 'Khởi tạo hệ thống Automation Studio hoàn tất. Sẵn sàng xử lý.',
       type: 'info',
     },
   ],
@@ -353,16 +272,17 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
     // 2. Load tasks from backend
     const tasks = await apiGetTasks();
-    if (tasks && tasks.length > 0) {
+    if (tasks !== null && tasks !== undefined) {
       set({
         tasks,
+        currentVideoId: tasks.length > 0 ? tasks[0].id : 0,
         globalProgress: {
           processed: tasks.filter((t) => t.status === 'DONE').length,
           total: tasks.length,
-          percent: Math.round(
-            tasks.reduce((acc, t) => acc + (t.progress || 0), 0) / Math.max(1, tasks.length)
-          ),
-          estimatedTime: '2m 15s',
+          percent: tasks.length > 0
+            ? Math.round(tasks.reduce((acc, t) => acc + (t.progress || 0), 0) / tasks.length)
+            : 0,
+          estimatedTime: tasks.length > 0 ? 'Tự động tính' : '0s',
         },
       });
     }
