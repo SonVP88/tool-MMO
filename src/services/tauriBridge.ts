@@ -1,22 +1,48 @@
 import type { TaskItem, BatchSettings, BoundingBox, StudioProfile } from '../types';
 
+const BRIDGE_URL = 'http://127.0.0.1:5678';
+
 // Detect whether running in Tauri desktop environment
 export const isTauri = (): boolean => {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
 };
 
-// Safe invoke wrapper
-export async function invokeCommand<T>(cmd: string, args: Record<string, any> = {}): Promise<T | null> {
-  if (isTauri()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<T>(cmd, args);
-    } catch (err) {
-      console.warn(`[Tauri Invoke Error] ${cmd}:`, err);
-      return null;
-    }
+// Event emitter registry for bridge
+type EventHandler = (payload: any) => void;
+const eventHandlers: Record<string, EventHandler[]> = {};
+let sseConnection: EventSource | null = null;
+
+function ensureSSE() {
+  if (typeof window === 'undefined' || sseConnection) return;
+  try {
+    sseConnection = new EventSource(`${BRIDGE_URL}/api/events`);
+    
+    sseConnection.addEventListener('task-progress', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const handlers = eventHandlers['task-progress'] || [];
+        handlers.forEach((h) => h(data));
+      } catch (err) {
+        console.warn('Error parsing task-progress event:', err);
+      }
+    });
+
+    sseConnection.addEventListener('live-log', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const handlers = eventHandlers['live-log'] || [];
+        handlers.forEach((h) => h(data));
+      } catch (err) {
+        console.warn('Error parsing live-log event:', err);
+      }
+    });
+
+    sseConnection.onerror = () => {
+      // Reconnect automatically handled by browser EventSource
+    };
+  } catch (err) {
+    console.warn('[Bridge SSE Init]', err);
   }
-  return null;
 }
 
 // Event listener wrapper
@@ -27,13 +53,126 @@ export async function listenTauriEvent<T>(
   if (isTauri()) {
     try {
       const { listen } = await import('@tauri-apps/api/event');
-      const unlisten = await listen<T>(event, (e) => handler(e.payload));
-      return unlisten;
-    } catch (err) {
-      console.warn(`[Tauri Listen Error] ${event}:`, err);
-      return null;
+      return await listen<T>(event, (e) => handler(e.payload));
+    } catch {
+      // fallback to SSE below
     }
   }
+
+  // HTTP SSE fallback
+  ensureSSE();
+  if (!eventHandlers[event]) {
+    eventHandlers[event] = [];
+  }
+  eventHandlers[event].push(handler);
+
+  return () => {
+    eventHandlers[event] = eventHandlers[event].filter((h) => h !== handler);
+  };
+}
+
+// Safe invoke wrapper
+export async function invokeCommand<T>(cmd: string, args: Record<string, any> = {}): Promise<T | null> {
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const res = await invoke<T>(cmd, args);
+      if (res !== null && res !== undefined) return res;
+    } catch {
+      // Fallback to local HTTP server below
+    }
+  }
+
+  // Fallback to local HTTP Bridge server on port 5678
+  try {
+    if (cmd === 'get_tasks') {
+      const res = await fetch(`${BRIDGE_URL}/api/tasks`);
+      return (await res.json()) as T;
+    }
+    if (cmd === 'add_tasks') {
+      const res = await fetch(`${BRIDGE_URL}/api/add_tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: args.items || [] }),
+      });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'start_queue') {
+      const res = await fetch(`${BRIDGE_URL}/api/queue/start`, { method: 'POST' });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'pause_queue') {
+      const res = await fetch(`${BRIDGE_URL}/api/queue/pause`, { method: 'POST' });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'cancel_queue') {
+      const res = await fetch(`${BRIDGE_URL}/api/queue/cancel`, { method: 'POST' });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'clean_done_tasks') {
+      const res = await fetch(`${BRIDGE_URL}/api/queue/clean_done`, { method: 'POST' });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'delete_selected_tasks') {
+      const res = await fetch(`${BRIDGE_URL}/api/queue/delete_selected`, { method: 'POST' });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'delete_waiting_tasks') {
+      const res = await fetch(`${BRIDGE_URL}/api/queue/delete_waiting`, { method: 'POST' });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'retry_failed_tasks') {
+      const res = await fetch(`${BRIDGE_URL}/api/queue/retry_failed`, { method: 'POST' });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'delete_task') {
+      const res = await fetch(`${BRIDGE_URL}/api/delete_task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: args.id }),
+      });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'open_output_folder') {
+      await fetch(`${BRIDGE_URL}/api/open_folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: args.path || 'C:\\Output' }),
+      });
+      return null;
+    }
+    if (cmd === 'open_file') {
+      await fetch(`${BRIDGE_URL}/api/open_file`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: args.path }),
+      });
+      return null;
+    }
+    if (cmd === 'detect_sub') {
+      const res = await fetch(`${BRIDGE_URL}/api/detect_sub`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoPath: args.videoPath || '' }),
+      });
+      return (await res.json()) as T;
+    }
+    if (cmd === 'save_current_settings') {
+      await fetch(`${BRIDGE_URL}/api/save_settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(args.settings || {}),
+      });
+      return null;
+    }
+    if (cmd === 'load_profiles') {
+      const res = await fetch(`${BRIDGE_URL}/api/profiles`);
+      return (await res.json()) as T;
+    }
+  } catch (err) {
+    console.warn(`[Local Bridge Error] ${cmd}:`, err);
+  }
+
   return null;
 }
 
@@ -73,6 +212,9 @@ export async function apiSaveCurrentSettings(
     text_color: settings.textColor,
     stroke_color: settings.strokeColor,
     render_engine: settings.renderEngine || 'FFmpeg Siêu Tốc (Chạy ngầm 100%)',
+    ai_engine_mode: settings.aiEngineMode || 'CAPCUT_PRO_NATIVE',
+    capcut_vip_voice: settings.capcutVipVoice || 'Cô Gái Hoạt Ngôn',
+    capcut_sync_speed: settings.capcutSyncSpeed !== false,
     capcut_draft_dir: settings.capcutDraftDir || '',
     capcut_exe_path: settings.capcutExePath || '',
     old_sub_blur_box: oldBox,
@@ -136,4 +278,8 @@ export async function apiOpenOutputFolder(path?: string): Promise<void> {
 
 export async function apiOpenFile(path: string): Promise<void> {
   await invokeCommand('open_file', { path });
+}
+
+export async function apiDetectSub(videoPath?: string): Promise<BoundingBox | null> {
+  return await invokeCommand<BoundingBox>('detect_sub', { videoPath });
 }

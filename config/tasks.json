@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1794877907770,
+    "name": "sample_video",
+    "source": "D:\\sonpd\\toolMMO\\tool-MMO\\python-worker\\temp\\sample_video.mp4",
+    "stage": "Chờ chạy",
+    "progress": 0,
+    "status": "WAITING",
+    "note": "Đã thêm vào hàng đợi thực",
+    "outputPath": "C:\\Output\\Reup_sample_video.mp4",
+    "selected": false
+  }
+]

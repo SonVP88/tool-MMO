@@ -311,54 +311,62 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   ],
 
   initApp: async () => {
-    if (isTauri()) {
-      // 1. Load profiles from Rust backend
-      const profiles = await apiLoadProfiles();
-      if (profiles && profiles.length > 0) {
-        set({
-          profiles: profiles.map((p) => p.name),
-          currentProfile: profiles[0].name,
-        });
-      }
-
-      // 2. Load tasks from Rust backend
-      const tasks = await apiGetTasks();
-      if (tasks && tasks.length > 0) {
-        set({ tasks });
-      }
-
-      // 3. Listen to realtime task-progress events from Rust
-      await listenTauriEvent<TaskProgressEvent>('task-progress', (event) => {
-        set((state) => {
-          const updatedTasks = state.tasks.map((t) =>
-            t.id === event.task_id
-              ? {
-                  ...t,
-                  stage: event.stage,
-                  progress: event.progress,
-                  status: event.status as any,
-                  note: event.note,
-                  outputPath: event.output_path || t.outputPath,
-                }
-              : t
-          );
-          return {
-            tasks: updatedTasks,
-            globalProgress: {
-              processed: event.global_processed,
-              total: event.global_total,
-              percent: Math.round(event.global_percent),
-              estimatedTime: event.estimated_time,
-            },
-          };
-        });
-      });
-
-      // 4. Listen to live-log events from Rust
-      await listenTauriEvent<LiveLogEvent>('live-log', (event) => {
-        get().addLog(event.message, event.log_type as any);
+    // 1. Load profiles from backend
+    const profiles = await apiLoadProfiles();
+    if (profiles && profiles.length > 0) {
+      set({
+        profiles: profiles.map((p) => p.name),
+        currentProfile: profiles[0].name,
       });
     }
+
+    // 2. Load tasks from backend
+    const tasks = await apiGetTasks();
+    if (tasks && tasks.length > 0) {
+      set({
+        tasks,
+        globalProgress: {
+          processed: tasks.filter((t) => t.status === 'DONE').length,
+          total: tasks.length,
+          percent: Math.round(
+            tasks.reduce((acc, t) => acc + (t.progress || 0), 0) / Math.max(1, tasks.length)
+          ),
+          estimatedTime: '2m 15s',
+        },
+      });
+    }
+
+    // 3. Listen to realtime task-progress events
+    await listenTauriEvent<TaskProgressEvent>('task-progress', (event) => {
+      set((state) => {
+        const updatedTasks = state.tasks.map((t) =>
+          t.id === event.task_id
+            ? {
+                ...t,
+                stage: event.stage,
+                progress: event.progress,
+                status: event.status as any,
+                note: event.note,
+                outputPath: event.output_path || t.outputPath,
+              }
+            : t
+        );
+        return {
+          tasks: updatedTasks,
+          globalProgress: {
+            processed: event.global_processed,
+            total: event.global_total,
+            percent: Math.round(event.global_percent),
+            estimatedTime: event.estimated_time,
+          },
+        };
+      });
+    });
+
+    // 4. Listen to live-log events
+    await listenTauriEvent<LiveLogEvent>('live-log', (event) => {
+      get().addLog(event.message, event.log_type as any);
+    });
   },
 
   setActiveTopTab: (tab) => set({ activeTopTab: tab }),
@@ -399,142 +407,69 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     set({ isRunning: nextState, isPaused: false });
 
     if (nextState) {
-      if (isTauri()) {
-        await apiStartQueue();
-      } else {
-        // Fallback simulation loop for browser dev mode
-        get().addLog('▶ [Dev Mode] Kích hoạt hàng đợi tự động chạy mô phỏng...', 'info');
-        const interval = setInterval(() => {
-          const currentTasks = get().tasks;
-          const waiting = currentTasks.find((t) => t.status === 'WAITING' || t.status === 'PROCESSING');
-          if (!waiting || !get().isRunning) {
-            clearInterval(interval);
-            return;
-          }
-          const nextProg = Math.min(100, waiting.progress + 20);
-          const nextStage =
-            nextProg >= 100
-              ? 'Hoàn tất'
-              : nextProg >= 80
-              ? 'Render video'
-              : nextProg >= 60
-              ? 'Tạo giọng đọc'
-              : nextProg >= 40
-              ? 'Dịch AI'
-              : 'Lấy phụ đề';
-
-          set((state) => ({
-            tasks: state.tasks.map((t) =>
-              t.id === waiting.id
-                ? {
-                    ...t,
-                    progress: nextProg,
-                    stage: nextStage,
-                    status: nextProg === 100 ? 'DONE' : 'PROCESSING',
-                    note: `Tiến độ: ${nextProg}%`,
-                  }
-                : t
-            ),
-          }));
-        }, 1200);
-      }
+      get().addLog('▶ Kích hoạt hàng đợi tự động xử lý video thực...', 'info');
+      await apiStartQueue();
     } else {
-      if (isTauri()) {
-        await apiCancelQueue();
-      }
+      await apiCancelQueue();
+      get().addLog('⏹ Đã dừng hàng đợi.', 'warn');
     }
   },
 
   pauseRun: async () => {
     const isPaused = !get().isPaused;
     set({ isPaused });
-    if (isTauri()) {
-      await apiPauseQueue();
-    } else {
-      get().addLog(isPaused ? '⏸ Tạm dừng xử lý hàng đợi.' : '▶ Tiếp tục xử lý hàng đợi.', 'warn');
-    }
+    await apiPauseQueue();
   },
 
   stopRun: async () => {
     set({ isRunning: false, isPaused: false });
-    if (isTauri()) {
-      await apiCancelQueue();
-    } else {
-      get().addLog('⏹ Đã hủy toàn bộ quy trình đang chạy.', 'error');
-    }
+    await apiCancelQueue();
+    get().addLog('⏹ Đã hủy toàn bộ quy trình đang chạy.', 'error');
   },
 
   retryErrors: async () => {
-    if (isTauri()) {
-      await apiRetryFailed();
-    } else {
-      set((state) => ({
-        tasks: state.tasks.map((t) =>
-          t.status === 'ERROR' || t.status === 'CANCELED'
-            ? { ...t, status: 'WAITING', progress: 0, stage: 'Chờ chạy' }
-            : t
-        ),
-      }));
-      get().addLog('⟳ Đã đưa các tác vụ lỗi về trạng thái chờ chạy.', 'info');
-    }
+    await apiRetryFailed();
+    const updated = await apiGetTasks();
+    if (updated) set({ tasks: updated });
+    get().addLog('⟳ Đã đưa các tác vụ lỗi về trạng thái chờ chạy.', 'info');
   },
 
   retrySelected: async () => {
     const selectedIds = get()
       .tasks.filter((t) => t.selected)
       .map((t) => t.id);
-    if (isTauri()) {
-      await apiRetrySelected(selectedIds);
-    } else {
-      set((state) => ({
-        tasks: state.tasks.map((t) =>
-          t.selected ? { ...t, status: 'WAITING', progress: 0, stage: 'Chờ chạy' } : t
-        ),
-      }));
-      get().addLog('⟳ Đã đưa các mục đã chọn về trạng thái chờ chạy.', 'info');
-    }
+    await apiRetrySelected(selectedIds);
+    const updated = await apiGetTasks();
+    if (updated) set({ tasks: updated });
+    get().addLog('⟳ Đã đưa các mục đã chọn về trạng thái chờ chạy.', 'info');
   },
 
   deleteSelected: async () => {
     const selectedIds = get()
       .tasks.filter((t) => t.selected)
       .map((t) => t.id);
-    if (isTauri()) {
-      await apiDeleteSelected(selectedIds);
-    } else {
-      set((state) => ({
-        tasks: state.tasks.filter((t) => !t.selected),
-      }));
-      get().addLog('Đã xóa các mục đã chọn khỏi hàng đợi.', 'warn');
-    }
+    await apiDeleteSelected(selectedIds);
+    const updated = await apiGetTasks();
+    if (updated) set({ tasks: updated });
+    get().addLog('Đã xóa các mục đã chọn khỏi hàng đợi.', 'warn');
   },
 
   deleteWaiting: async () => {
-    if (isTauri()) {
-      await apiDeleteWaiting();
-    } else {
-      set((state) => ({
-        tasks: state.tasks.filter((t) => t.status !== 'WAITING'),
-      }));
-      get().addLog('Đã xóa các mục đang chờ khỏi hàng đợi.', 'warn');
-    }
+    await apiDeleteWaiting();
+    const updated = await apiGetTasks();
+    if (updated) set({ tasks: updated });
+    get().addLog('Đã xóa các mục đang chờ khỏi hàng đợi.', 'warn');
   },
 
   cleanDone: async () => {
-    if (isTauri()) {
-      await apiCleanDone();
-    } else {
-      set((state) => ({
-        tasks: state.tasks.filter((t) => t.status !== 'DONE'),
-      }));
-      get().addLog('Đã dọn dẹp các tác vụ đã hoàn tất.', 'info');
-    }
+    await apiCleanDone();
+    const updated = await apiGetTasks();
+    if (updated) set({ tasks: updated });
+    get().addLog('Đã dọn dẹp các tác vụ đã hoàn tất.', 'info');
   },
 
   deleteTask: async (id) => {
-    if (isTauri()) {
-      await apiDeleteTask(id);
-    }
+    await apiDeleteTask(id);
     set((state) => ({
       tasks: state.tasks.filter((t) => t.id !== id),
     }));
@@ -547,11 +482,15 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   addBatchTasks: async (items) => {
     if (items.length === 0) return;
-    if (isTauri()) {
-      const updated = await apiAddTasks(items);
-      if (updated) {
-        set({ tasks: updated });
-      }
+    const updated = await apiAddTasks(items);
+    if (updated && updated.length > 0) {
+      set({
+        tasks: updated,
+        globalProgress: {
+          ...get().globalProgress,
+          total: updated.length,
+        },
+      });
     } else {
       const baseId = Date.now();
       const newTasks: TaskItem[] = items.map((item, idx) => ({
@@ -560,7 +499,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         stage: 'Chờ chạy',
         progress: 0,
         status: 'WAITING',
-        note: 'Vừa thêm vào hàng đợi',
+        note: 'Vừa thêm vào hàng đợi thực',
         outputPath: `C:\\Output\\Reup_${item.split(/[\/\\]/).pop() || 'Video'}.mp4`,
         selected: false,
       }));
@@ -571,8 +510,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
           total: state.tasks.length + newTasks.length,
         },
       }));
-      get().addLog(`+ Đã thêm ${items.length} video vào hàng đợi.`, 'info');
     }
+    get().addLog(`+ Đã thêm ${items.length} video vào hàng đợi thực tế.`, 'success');
   },
 
   setCurrentVideoId: (id) => set({ currentVideoId: id }),

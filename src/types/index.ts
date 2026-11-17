@@ -7,6 +7,7 @@ export type TaskStatus = 'DONE' | 'SUBTITLE' | 'WAITING' | 'ERROR' | 'CANCELED' 
 export interface TaskItem {
   id: number;
   name: string;
+  source?: string;
   stage: string;
   progress: number;
   status: TaskStatus;

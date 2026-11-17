@@ -5,6 +5,7 @@ import {
   Search
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
+import { apiDetectSub } from '../services/tauriBridge';
 import type { BoundingBox } from '../types';
 
 export const VideoPreview: React.FC = () => {
@@ -310,11 +311,19 @@ export const VideoPreview: React.FC = () => {
       <div className="flex items-center justify-between pt-1 border-t border-[#233145]">
         <button
           type="button"
-          onClick={() => {
-            setOldSubBlurBox({ x: 18.0, y: 64.2, width: 36.0, height: 25.0 });
-            useStudioStore.getState().addLog('🔍 [Auto OCR] Đã tự động dò thấy vị trí Sub cũ: X=18.0%, Y=64.2%, W=36.0%, H=25.0% (RapidOCR Vision)', 'success');
+          onClick={async () => {
+            const currentTask = tasks.find((t) => t.id === currentVideoId) || tasks[0];
+            useStudioStore.getState().addLog('🔍 Đang trích xuất frame và chạy RapidOCR để dò vị trí sub...', 'info');
+            const detected = await apiDetectSub(currentTask?.outputPath || currentTask?.source);
+            if (detected && detected.width && detected.height) {
+              setOldSubBlurBox({ x: detected.x, y: detected.y, width: detected.width, height: detected.height });
+              useStudioStore.getState().addLog(`🔍 [Auto OCR] Tọa độ tìm thấy: X=${detected.x}%, Y=${detected.y}%, W=${detected.width}%, H=${detected.height}% (RapidOCR Vision)`, 'success');
+            } else {
+              setOldSubBlurBox({ x: 18.0, y: 64.2, width: 36.0, height: 25.0 });
+              useStudioStore.getState().addLog('🔍 [Auto OCR] Áp dụng tọa độ vùng chữ chuẩn: X=18.0%, Y=64.2%, W=36.0%, H=25.0%', 'info');
+            }
           }}
-          className="w-full py-1.5 px-3 bg-[#132238] hover:bg-[#1a2f4c] text-sky-300 border border-sky-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+          className="w-full py-1.5 px-3 bg-[#132238] hover:bg-[#1a2f4c] text-sky-300 border border-sky-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
         >
           <Search className="w-3.5 h-3.5 text-sky-400" />
           <span>🔍 Tự động dò vị trí Sub cũ (Auto OCR)</span>

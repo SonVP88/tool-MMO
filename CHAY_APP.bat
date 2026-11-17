@@ -14,6 +14,15 @@ if not exist "node_modules" (
     call CAI_DAT_MAY_MOI.bat
 )
 
+:: Kiểm tra và khởi động Lõi thực thi Pipeline Server (Port 5678)
+echo [*] Đang kiểm tra Lõi thực thi Pipeline Server (Port 5678)...
+powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5678/api/tasks' -TimeoutSec 1 -UseBasicParsing; exit 0 } catch { exit 1 }"
+if %ERRORLEVEL% NEQ 0 (
+    echo [*] Đang khởi động Lõi xử lý thực tế Python Server...
+    start /min cmd /c "python python-worker/local_bridge_server.py"
+    timeout /t 1 /nobreak >nul
+)
+
 echo [*] Đang kiểm tra máy chủ giao diện ứng dụng...
 powershell -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5173' -TimeoutSec 1 -UseBasicParsing; exit 0 } catch { exit 1 }"
 if %ERRORLEVEL% NEQ 0 (
