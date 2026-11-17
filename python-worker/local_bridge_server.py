@@ -109,7 +109,7 @@ def worker_thread_loop():
             try:
                 with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
                     s = json.load(f)
-                    output_dir = s.get("output_dir", output_dir)
+                    output_dir = s.get("output_dir", s.get("outputDir", output_dir))
             except Exception:
                 pass
 
@@ -662,6 +662,27 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                 subprocess.Popen(["explorer", p])
             emit_live_log(f"Đã mở thư mục xuất: {p}", "info")
             self.send_json({"status": "opened"})
+            return
+
+        if path == "/api/select_folder":
+            selected = ""
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk()
+                root.withdraw()
+                root.wm_attributes("-topmost", 1)
+                selected = filedialog.askdirectory(title="Chọn thư mục nhận dữ liệu Output (Ổ D, E, C...)")
+                root.destroy()
+            except Exception as e:
+                emit_live_log(f"Lỗi chọn thư mục: {e}", "warn")
+
+            if selected:
+                selected = os.path.normpath(selected)
+                emit_live_log(f"Đã chọn thư mục xuất mới: {selected}", "success")
+                self.send_json({"status": "success", "folder": selected})
+            else:
+                self.send_json({"status": "canceled", "folder": ""})
             return
 
         if path == "/api/open_file":

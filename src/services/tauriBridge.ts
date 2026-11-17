@@ -323,3 +323,20 @@ export async function apiTestApiKey(type: 'gemini' | 'groq', key: string): Promi
     return { valid: false, message: err?.message || 'Không thể kết nối đến máy chủ bridge' };
   }
 }
+
+export async function apiSelectFolder(): Promise<string | null> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/select_folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (data.status === 'success' && data.folder) {
+      return data.folder;
+    }
+    return null;
+  } catch (err) {
+    console.error('Failed to select folder:', err);
+    return null;
+  }
+}

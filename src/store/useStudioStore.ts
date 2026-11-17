@@ -549,23 +549,22 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setOutputDir: (dir) => {
     set({ outputDir: dir });
     get().triggerAutoSave();
+    get().addLog(`Đã đổi thư mục xuất sang: ${dir}`, 'info');
   },
 
   triggerAutoSave: async () => {
     const now = new Date().toLocaleTimeString('vi-VN', { hour12: false });
     set({ autoSaveTime: now });
-    if (isTauri()) {
-      const state = get();
-      await apiSaveCurrentSettings(
-        state.settings,
-        state.oldSubBlurBox,
-        state.newSubBox,
-        state.geminiApiKey,
-        state.groqApiKey,
-        state.douyinCookie,
-        state.outputDir
-      );
-    }
+    const state = get();
+    await apiSaveCurrentSettings(
+      state.settings,
+      state.oldSubBlurBox,
+      state.newSubBox,
+      state.geminiApiKey,
+      state.groqApiKey,
+      state.douyinCookie,
+      state.outputDir
+    );
   },
 
   addLog: (message, type = 'info') => {
@@ -581,11 +580,9 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   openFolder: (path) => {
-    if (isTauri()) {
-      apiOpenOutputFolder(path);
-    } else {
-      get().addLog(`Đang mở thư mục: ${path || 'C:\\Output'}`, 'info');
-    }
+    const target = path || get().outputDir || 'C:\\Output';
+    apiOpenOutputFolder(target);
+    get().addLog(`Đang mở thư mục xuất: ${target}`, 'info');
   },
 
   openVideoFile: (path) => {

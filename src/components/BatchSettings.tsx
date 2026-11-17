@@ -7,18 +7,25 @@ import {
   Volume2, 
   VolumeX, 
   Gauge, 
-  ChevronDown,
-  Video,
-  Zap,
-  Sparkles
+  ChevronDown, 
+  Video, 
+  Zap, 
+  Sparkles, 
+  HardDrive, 
+  Folder, 
+  FolderOpen 
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
+import { apiSelectFolder } from '../services/tauriBridge';
 
 export const BatchSettingsForm: React.FC = () => {
   const {
     settings,
     updateSettings,
     geminiApiKey,
+    outputDir,
+    setOutputDir,
+    openFolder,
     setTranslationConfigOpen,
     setCapCutConfigOpen,
     setCharacterModalOpen,
@@ -26,6 +33,13 @@ export const BatchSettingsForm: React.FC = () => {
 
   const handleSyncCharacters = () => {
     setCharacterModalOpen(true);
+  };
+
+  const handleSelectOutputFolder = async () => {
+    const selected = await apiSelectFolder();
+    if (selected) {
+      setOutputDir(selected);
+    }
   };
 
   return (
@@ -68,6 +82,68 @@ export const BatchSettingsForm: React.FC = () => {
             </option>
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-emerald-400 absolute right-2.5 top-2.5 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Thư Mục Nhận Dữ Liệu Đầu Ra (Tùy chọn ổ C, D, E...) */}
+      <div className="bg-[#0e141e] p-2 rounded-lg border border-[#253347] flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5">
+            <HardDrive className="w-3.5 h-3.5 text-sky-400" />
+            Thư Mục Xuất Video (Tùy chọn Ổ C, D, E...):
+          </label>
+          <span className="text-[10px] text-sky-400 font-mono font-bold bg-sky-950/80 px-1.5 py-0.5 rounded border border-sky-500/30">
+            {outputDir ? outputDir.split('\\')[0] || 'C:' : 'C:'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={outputDir || 'C:\\Output'}
+            onChange={(e) => setOutputDir(e.target.value)}
+            placeholder="Ví dụ: D:\Output hoặc E:\Videos"
+            className="flex-1 bg-[#151d2a] border border-[#2e405a] rounded px-2.5 py-1 text-xs text-sky-200 font-mono focus:outline-none focus:border-sky-500"
+          />
+          <button
+            type="button"
+            onClick={handleSelectOutputFolder}
+            className="px-2 py-1 bg-sky-950/80 hover:bg-sky-900 border border-sky-500/40 text-sky-300 rounded font-semibold text-[11px] flex items-center gap-1 transition-colors whitespace-nowrap cursor-pointer"
+            title="Duyệt và chọn thư mục trên ổ đĩa"
+          >
+            <Folder className="w-3 h-3 text-sky-400" />
+            Chọn Thư Mục...
+          </button>
+          <button
+            type="button"
+            onClick={() => openFolder(outputDir)}
+            className="p-1 bg-[#1a2332] hover:bg-[#253448] border border-[#2c3d54] text-slate-300 rounded transition-colors cursor-pointer"
+            title="Mở thư mục trong File Explorer"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+        </div>
+
+        {/* Quick Drive Selector Pills */}
+        <div className="flex items-center gap-1.5 pt-0.5 text-[10px]">
+          <span className="text-slate-500">Chuyển nhanh:</span>
+          {['C:\\Output', 'D:\\Output', 'E:\\Output'].map((path) => (
+            <button
+              key={path}
+              type="button"
+              onClick={() => setOutputDir(path)}
+              className={`px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
+                outputDir === path
+                  ? 'bg-sky-900/60 border-sky-400 text-sky-200 font-bold'
+                  : 'bg-[#151d2a] border-[#293a50] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {path}
+            </button>
+          ))}
+          <span className="text-slate-500 italic ml-auto text-[9px]">
+            *Thoải mái đổi sang ổ D, E để tránh đầy ổ C
+          </span>
         </div>
       </div>
 
