@@ -143,6 +143,10 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
         source_clean = f"https://{source_clean}"
     elif source_clean.startswith("tiktok.com/") or source_clean.startswith("www.tiktok.com/"):
         source_clean = f"https://{source_clean}"
+    elif source_clean.startswith("bilibili.com/") or source_clean.startswith("www.bilibili.com/"):
+        source_clean = f"https://{source_clean}"
+    elif source_clean.startswith("b23.tv/"):
+        source_clean = f"https://{source_clean}"
 
     emit_progress(task_id, 5, "Tải video", f"Chuẩn bị nguồn video: {source_clean}")
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -412,26 +416,66 @@ def step_tts_synthesis(task_id: int, subtitles: list, temp_dir: Path, voice_name
 
     audio_segments = []
     import asyncio
+    ffmpeg_exe = get_ffmpeg_path()
 
     for s in subtitles:
-        txt = s.get('trans', '')
-        seg_file = temp_dir / f"tts_{task_id}_{s['index']}.mp3"
+        txt = s.get('trans', s.get('text', '')).strip()
+        if not txt:
+            continue
+        seg_mp3 = temp_dir / f"tts_{task_id}_{s['index']}.mp3"
+        seg_wav = temp_dir / f"tts_{task_id}_{s['index']}.wav"
         try:
-            asyncio.run(generate_edge_tts_async(txt, voice_tag, rate_str, seg_file))
-            if seg_file.exists() and seg_file.stat().st_size > 0:
-                audio_segments.append(seg_file)
-        except Exception as e:
+            asyncio.run(generate_edge_tts_async(txt, voice_tag, rate_str, seg_mp3))
+            if seg_mp3.exists() and seg_mp3.stat().st_size > 0:
+                # Convert to PCM WAV 24kHz mono for clean stitching
+                cmd_conv = [
+                    ffmpeg_exe, "-y",
+                    "-i", str(seg_mp3),
+                    "-ar", "24000", "-ac", "1",
+                    str(seg_wav)
+                ]
+                subprocess.run(cmd_conv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if seg_wav.exists() and seg_wav.stat().st_size > 0:
+                    audio_segments.append((s, seg_wav))
+        except Exception:
             pass
 
     full_voice_wav = temp_dir / f"full_voice_{task_id}.wav"
-    ffmpeg_exe = get_ffmpeg_path()
 
     if audio_segments:
-        # Concat segments with ffmpeg concat demuxer
+        # Build timeline-accurate concat list with exact silence gaps
         concat_list = temp_dir / f"concat_{task_id}.txt"
+        current_time = 0.0
+        concat_items = []
+        import wave
+
+        for idx, (s, seg_wav) in enumerate(audio_segments):
+            target_start = float(s.get('start', 0.0))
+            if target_start > current_time + 0.04:
+                gap = round(target_start - current_time, 3)
+                silence_file = temp_dir / f"silence_{task_id}_{idx}.wav"
+                cmd_sil = [
+                    ffmpeg_exe, "-y",
+                    "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
+                    "-t", str(gap),
+                    str(silence_file)
+                ]
+                subprocess.run(cmd_sil, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if silence_file.exists():
+                    concat_items.append(silence_file)
+                current_time = target_start
+
+            concat_items.append(seg_wav)
+            try:
+                with wave.open(str(seg_wav), 'rb') as wf:
+                    seg_dur = wf.getnframes() / float(wf.getframerate())
+            except Exception:
+                seg_dur = max(0.5, float(s.get('end', target_start + 1.0)) - target_start)
+            current_time += seg_dur
+
         with open(concat_list, "w", encoding="utf-8") as f:
-            for seg in audio_segments:
-                f.write(f"file '{seg.resolve().as_posix()}'\n")
+            for item in concat_items:
+                f.write(f"file '{item.resolve().as_posix()}'\n")
 
         cmd = [
             ffmpeg_exe, "-y",
@@ -441,7 +485,7 @@ def step_tts_synthesis(task_id: int, subtitles: list, temp_dir: Path, voice_name
             str(full_voice_wav)
         ]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        emit_progress(task_id, 78, "Tạo giọng đọc", "Đã ghép dải âm thanh lồng tiếng chuẩn timeline.")
+        emit_progress(task_id, 78, "Tạo giọng đọc", "Đã ghép dải âm thanh lồng tiếng chuẩn timeline khớp từng giây.")
     else:
         # Generate clean tone fallback
         cmd = [

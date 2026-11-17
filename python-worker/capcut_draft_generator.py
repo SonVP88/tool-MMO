@@ -190,7 +190,18 @@ def create_capcut_draft(
         audio_speed_id = generate_id()
         materials["speeds"].append({"id": audio_speed_id, "speed": 1.0, "curve_speed": None})
 
-        dur_us = sec_to_us(seg['end'] - seg['start'])
+        target_dur_sec = max(0.5, float(seg.get('end', 1.0)) - float(seg.get('start', 0.0)))
+        actual_dur_sec = target_dur_sec
+        try:
+            import wave
+            with wave.open(str(seg_audio_path), 'rb') as wf:
+                actual_dur_sec = wf.getnframes() / float(wf.getframerate())
+        except Exception:
+            pass
+
+        dur_sec = max(target_dur_sec, actual_dur_sec)
+        dur_us = sec_to_us(dur_sec)
+
         materials["audios"].append({
             "id": audio_mat_id,
             "path": str(seg_audio_path.resolve()),
