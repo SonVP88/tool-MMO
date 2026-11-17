@@ -10,3 +10,4 @@ echo [*] Dang khoi dong cua so ung dung Desktop doc lap...
 
 start "" python run_desktop_app.py
 exit
+

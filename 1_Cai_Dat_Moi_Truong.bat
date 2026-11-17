@@ -13,3 +13,4 @@ echo [OK] DA HOAN TAT CAI DAT!
 echo Ban co the chay file "Chay_App_Desktop.bat" de su dung ngay!
 echo ========================================================
 pause
+

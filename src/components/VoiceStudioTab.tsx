@@ -22,40 +22,7 @@ export const VoiceStudioTab: React.FC = () => {
   
   const currentTask = tasks.find((t) => t.id === currentVideoId) || tasks[0];
 
-  const [subtitles, setSubtitles] = useState<SubtitleLine[]>([
-    {
-      index: 1,
-      start: '00:00:00,500',
-      end: '00:00:02,800',
-      originalText: '第十七集 萧炎再入魔兽山脉',
-      translatedText: 'Tập 17: Tiêu Viêm một lần nữa tiến vào Ma Thú Sơn Mạch.',
-      speaker: 'Cô Gái Hoạt Ngôn (vi-VN)',
-    },
-    {
-      index: 2,
-      start: '00:00:03,000',
-      end: '00:00:05,400',
-      originalText: '为了寻找炼制七品丹药的珍稀药材',
-      translatedText: 'Để tìm kiếm dược liệu quý hiếm luyện chế thất phẩm đan dược.',
-      speaker: 'Cô Gái Hoạt Ngôn (vi-VN)',
-    },
-    {
-      index: 3,
-      start: '00:00:05,600',
-      end: '00:00:07,800',
-      originalText: '他独自面对潜伏在迷雾中的远古凶兽',
-      translatedText: 'Hắn một mình đối mặt với hung thú cổ xưa ẩn mình trong làn sương mù.',
-      speaker: 'Nam Miền Bắc Trầm Ấm (vi-VN)',
-    },
-    {
-      index: 4,
-      start: '00:00:08,000',
-      end: '00:00:10,000',
-      originalText: '这一次，异火的力量将再次爆发！',
-      translatedText: 'Lần này, uy lực của Dị Hỏa sẽ một lần nữa bùng nổ đỉnh cao!',
-      speaker: 'Nam Miền Bắc Trầm Ấm (vi-VN)',
-    },
-  ]);
+  const [subtitles, setSubtitles] = useState<SubtitleLine[]>([]);
 
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [loadingAudioIndex, setLoadingAudioIndex] = useState<number | null>(null);
@@ -421,7 +388,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e2a3c]">
-              {subtitles.map((sub) => (
+              {subtitles.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-14 text-center text-slate-500">
+                    {isLoadingSubs ? (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="w-6 h-6 animate-spin text-sky-400" />
+                        <span className="text-xs text-slate-300">Đang nạp phụ đề từ video...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <FileText className="w-10 h-10 text-slate-600 mb-1" />
+                        <span className="text-xs font-semibold text-slate-300">
+                          Chưa có dữ liệu phụ đề cho {currentTask ? `Video #${currentTask.id}` : 'tác vụ này'}
+                        </span>
+                        <span className="text-[11px] text-slate-500 max-w-md">
+                          Bấm nút <strong className="text-emerald-400">"Thêm Câu"</strong> ở trên để tự nhập câu thoại, hoặc chạy hàng đợi để Whisper AI trích xuất tự động từ video.
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                subtitles.map((sub) => (
                 <tr key={sub.index} className="hover:bg-[#1a2436] transition-colors group">
                   <td className="py-2.5 px-2 text-center text-slate-500 font-mono text-[11px]">
                     {sub.index}
@@ -501,7 +490,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     </div>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

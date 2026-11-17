@@ -12,9 +12,7 @@ import { useStudioStore } from '../store/useStudioStore';
 export const AudioNovelTab: React.FC = () => {
   const { addLog, outputDir, setStudioMode } = useStudioStore();
 
-  const [storyText, setStoryText] = useState(
-    `Chương 1: Trọng Sinh Về Năm 2008.\n\nTiêu Viêm mở mắt ra, nhìn thấy trần nhà bong tróc quen thuộc của căn phòng trọ hai mươi mét vuông năm nào.\n\n"Chẳng lẽ... mình đã thật sự trở lại?"\n\nHắn đưa tay sờ lên khuôn mặt vẫn còn non nớt của tuổi mười tám, tim đập thình thịch liên hồi. Đời trước, hắn bỏ lỡ quá nhiều cơ hội, để mặc gia đình rơi vào cảnh khốn cùng, người yêu rời xa trong tuyệt vọng.\n\nNhưng đời này đã khác! Nắm giữ ký ức của mười sáu năm tương lai, hắn thề sẽ làm lại tất cả từ đầu, leo lên đỉnh cao của thương trường và nắm giữ vận mệnh trong tay mình!`
-  );
+  const [storyText, setStoryText] = useState('');
 
   const [bgmVolume, setBgmVolume] = useState(12);
   const [bgmTrack, setBgmTrack] = useState('Nhạc Cổ Phong Du Dương (Dịu nhẹ)');

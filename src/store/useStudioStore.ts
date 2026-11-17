@@ -149,29 +149,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   isCharacterModalOpen: false,
   isDependencyDoctorOpen: false,
 
-  characters: [
-    {
-      id: '1',
-      originalName: '萧炎',
-      translatedName: 'Tiêu Viêm',
-      pronoun: 'Ta - Ngươi',
-      voice: 'Nam Miền Bắc Trầm Ấm (vi-VN)',
-    },
-    {
-      id: '2',
-      originalName: '药老',
-      translatedName: 'Dược Lão',
-      pronoun: 'Sư đồ / Lão phu',
-      voice: 'Nam Truyện Cổ Tích Lão Niên (vi-VN)',
-    },
-    {
-      id: '3',
-      originalName: '美杜莎',
-      translatedName: 'Mỹ Đỗ Toa',
-      pronoun: 'Bản vương - Ngươi',
-      voice: 'Cô Gái Hoạt Ngôn (vi-VN)',
-    },
-  ],
+  characters: (() => {
+    try {
+      const saved = localStorage.getItem('studio_characters');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  })(),
 
   tasks: [],
 
@@ -612,5 +596,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setCapCutConfigOpen: (open) => set({ isCapCutConfigOpen: open }),
   setCharacterModalOpen: (open) => set({ isCharacterModalOpen: open }),
   setDependencyDoctorOpen: (open) => set({ isDependencyDoctorOpen: open }),
-  setCharacters: (chars) => set({ characters: chars }),
+  setCharacters: (chars) => {
+    try {
+      localStorage.setItem('studio_characters', JSON.stringify(chars));
+    } catch {}
+    set({ characters: chars });
+  },
 }));

@@ -25,63 +25,12 @@ pub struct QueueManager {
 
 impl QueueManager {
     pub fn new(concurrency_limit: usize) -> Self {
-        let default_tasks = vec![
-            TaskItem {
-                id: 17,
-                name: "17".to_string(),
-                source: "Episode_17".to_string(),
-                stage: "Hoàn tất".to_string(),
-                progress: 100,
-                status: "DONE".to_string(),
-                note: "Render hoàn tất không lỗi".to_string(),
-                output_path: "C:\\Output\\Reup_17.mp4".to_string(),
-                selected: false,
-            },
-            TaskItem {
-                id: 18,
-                name: "18".to_string(),
-                source: "Episode_18".to_string(),
-                stage: "Hoàn tất".to_string(),
-                progress: 100,
-                status: "DONE".to_string(),
-                note: "Render hoàn tất không lỗi".to_string(),
-                output_path: "C:\\Output\\Reup_18.mp4".to_string(),
-                selected: false,
-            },
-            TaskItem {
-                id: 19,
-                name: "19".to_string(),
-                source: "Episode_19".to_string(),
-                stage: "Hoàn tất".to_string(),
-                progress: 100,
-                status: "DONE".to_string(),
-                note: "Render hoàn tất không lỗi".to_string(),
-                output_path: "C:\\Output\\Reup_19.mp4".to_string(),
-                selected: false,
-            },
-            TaskItem {
-                id: 20,
-                name: "20".to_string(),
-                source: "https://v.douyin.com/iRxx20/".to_string(),
-                stage: "Lấy phụ đề".to_string(),
-                progress: 28,
-                status: "SUBTITLE".to_string(),
-                note: "Đang trích xuất audio & chạy Whisper...".to_string(),
-                output_path: "C:\\Output\\Reup_20.mp4".to_string(),
-                selected: true,
-            },
-            TaskItem {
-                id: 21,
-                name: "21".to_string(),
-                source: "https://v.douyin.com/iRxx21/".to_string(),
-                stage: "Chờ chạy".to_string(),
-                progress: 0,
-                status: "WAITING".to_string(),
-                note: "Nằm trong hàng đợi tiến trình".to_string(),
-                output_path: "C:\\Output\\Reup_21.mp4".to_string(),
-                selected: false,
-            },
-        ];
+        let mut default_tasks: Vec<TaskItem> = Vec::new();
+        if let Ok(content) = std::fs::read_to_string("./config/tasks.json") {
+            if let Ok(tasks) = serde_json::from_str::<Vec<TaskItem>>(&content) {
+                default_tasks = tasks;
+            }
+        }
 
         Self {
             inner: Arc::new(Mutex::new(QueueState {
