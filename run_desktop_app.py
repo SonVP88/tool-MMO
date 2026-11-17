@@ -4,6 +4,8 @@ import time
 import subprocess
 import urllib.request
 import threading
+import http.server
+from functools import partial
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,20 +32,36 @@ def ensure_bridge_server():
             if is_server_alive("http://127.0.0.1:5678/api/tasks"):
                 break
 
+def start_dist_server(dist_path, port=5173):
+    handler = partial(http.server.SimpleHTTPRequestHandler, directory=str(dist_path))
+    httpd = http.server.ThreadingHTTPServer(('127.0.0.1', port), handler)
+    httpd.serve_forever()
+
 def ensure_frontend_server():
-    if not is_server_alive("http://127.0.0.1:5173"):
-        print("[*] Đang khởi động giao diện Studio...")
-        creation_flags = 0x08000000 if sys.platform == "win32" else 0
-        subprocess.Popen(
-            ["npx", "vite", "--host", "127.0.0.1", "--port", "5173"],
-            shell=True,
-            cwd=str(BASE_DIR),
-            creationflags=creation_flags
-        )
-        for _ in range(15):
-            time.sleep(0.5)
-            if is_server_alive("http://127.0.0.1:5173"):
-                break
+    if is_server_alive("http://127.0.0.1:5173"):
+        return
+
+    dist_index = BASE_DIR / "dist" / "index.html"
+    if dist_index.exists():
+        print("[*] Đang phục vụ giao diện từ bản dựng sản phẩm (dist)...")
+        t = threading.Thread(target=start_dist_server, args=(BASE_DIR / "dist", 5173), daemon=True)
+        t.start()
+        time.sleep(1)
+        return
+
+    # Fallback to dev server if dist not built yet
+    print("[*] Đang khởi động giao diện Vite Dev Server...")
+    creation_flags = 0x08000000 if sys.platform == "win32" else 0
+    subprocess.Popen(
+        ["npx", "vite", "--host", "127.0.0.1", "--port", "5173"],
+        shell=True,
+        cwd=str(BASE_DIR),
+        creationflags=creation_flags
+    )
+    for _ in range(15):
+        time.sleep(0.5)
+        if is_server_alive("http://127.0.0.1:5173"):
+            break
 
 def launch_native_window():
     ensure_bridge_server()
