@@ -29,6 +29,8 @@ import {
   apiDeleteTask,
   apiOpenOutputFolder,
   apiOpenFile,
+  apiUploadVideoFile,
+  apiAddLocalPath,
   listenTauriEvent
 } from '../services/tauriBridge';
 
@@ -103,6 +105,8 @@ interface StudioState {
   deleteTask: (id: number) => Promise<void>;
   addTask: (name: string, path?: string) => Promise<void>;
   addBatchTasks: (items: string[]) => Promise<void>;
+  uploadVideoFiles: (files: File[]) => Promise<void>;
+  addLocalPath: (path: string) => Promise<void>;
   setCurrentVideoId: (id: number) => void;
   togglePlay: () => void;
   setCurrentTime: (time: number) => void;
@@ -512,6 +516,47 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       }));
     }
     get().addLog(`+ Đã thêm ${items.length} video vào hàng đợi thực tế.`, 'success');
+  },
+
+  uploadVideoFiles: async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      get().addLog(`Đang tải file (${i + 1}/${files.length}): ${file.name}...`, 'info');
+      const res = await apiUploadVideoFile(file);
+      if (res && res.tasks) {
+        set({ tasks: res.tasks });
+      }
+    }
+    const updated = await apiGetTasks();
+    if (updated) {
+      set({
+        tasks: updated,
+        globalProgress: {
+          ...get().globalProgress,
+          total: updated.length,
+        },
+      });
+    }
+    get().addLog(`Đã tải lên và đưa ${files.length} video thực tế vào hàng đợi!`, 'success');
+  },
+
+  addLocalPath: async (path: string) => {
+    if (!path.trim()) return;
+    get().addLog(`Đang quét file từ đường dẫn: ${path}...`, 'info');
+    const res = await apiAddLocalPath(path);
+    if (res && res.tasks) {
+      set({
+        tasks: res.tasks,
+        globalProgress: {
+          ...get().globalProgress,
+          total: res.tasks.length,
+        },
+      });
+      get().addLog(`Đã thêm thành công ${res.count || ''} video từ: ${path}`, 'success');
+    } else {
+      get().addLog(`Không tìm thấy video hợp lệ tại: ${path}`, 'warn');
+    }
   },
 
   setCurrentVideoId: (id) => set({ currentVideoId: id }),

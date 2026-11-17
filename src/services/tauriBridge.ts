@@ -283,3 +283,30 @@ export async function apiOpenFile(path: string): Promise<void> {
 export async function apiDetectSub(videoPath?: string): Promise<BoundingBox | null> {
   return await invokeCommand<BoundingBox>('detect_sub', { videoPath });
 }
+
+export async function apiUploadVideoFile(file: File): Promise<any> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/upload?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      body: file,
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Failed to upload video file:', err);
+    return null;
+  }
+}
+
+export async function apiAddLocalPath(path: string): Promise<any> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/add_local_path`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Failed to add local path:', err);
+    return null;
+  }
+}

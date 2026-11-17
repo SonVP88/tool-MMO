@@ -20,6 +20,8 @@ import time
 import re
 from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 # Ensure UTF-8 output on Windows
 if sys.platform.startswith('win'):
     import io
@@ -136,11 +138,24 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
     raw_video = temp_dir / f"input_raw_{task_id}.mp4"
 
     # Check if local file
-    if os.path.exists(source) and os.path.isfile(source):
-        emit_progress(task_id, 15, "Tải video", f"Sao chép file video nội bộ: {os.path.basename(source)}")
-        shutil.copy2(source, raw_video)
-        emit_progress(task_id, 20, "Tải video", "Nhập video hoàn tất.")
-        return raw_video
+    candidate_paths = [
+        Path(source),
+        BASE_DIR / source,
+        Path.cwd() / source,
+        BASE_DIR / "python-worker" / source,
+        BASE_DIR / "python-worker" / "temp" / Path(source).name,
+        BASE_DIR / "python-worker" / "temp" / "uploads" / Path(source).name,
+        BASE_DIR / "temp" / Path(source).name,
+    ]
+    for cand in candidate_paths:
+        try:
+            if cand.exists() and cand.is_file():
+                emit_progress(task_id, 15, "Tải video", f"Sao chép file video nội bộ: {cand.name}")
+                shutil.copy2(str(cand), str(raw_video))
+                emit_progress(task_id, 20, "Tải video", "Nhập video hoàn tất.")
+                return raw_video
+        except Exception:
+            pass
 
     # Is URL -> run yt-dlp
     emit_progress(task_id, 10, "Tải video", f"[yt-dlp] Đang phân tích và tải link: {source}")
@@ -523,10 +538,13 @@ def main():
 
         # Check AI Engine Mode: Native CapCut Pro vs Hybrid Pro vs Cloud Local
         ai_engine_mode = settings.get("aiEngineMode", "CAPCUT_PRO_NATIVE")
+        render_engine = settings.get("renderEngine", "FFmpeg Siêu Tốc (Chạy ngầm 100%)")
         custom_draft_dir = config.get("capcutDraftDir", "")
         custom_capcut_exe = config.get("capcutExePath", "")
 
-        if ai_engine_mode in ["CAPCUT_PRO_NATIVE", "HYBRID_PRO"]:
+        is_capcut_render = ("capcut" in render_engine.lower() or "nháp capcut" in render_engine.lower() or "tự động hóa capcut" in render_engine.lower())
+
+        if (ai_engine_mode in ["CAPCUT_PRO_NATIVE", "HYBRID_PRO"]) and is_capcut_render:
             emit_progress(task_id, 25, "CapCut Pro Init", f"Khởi tạo Timeline CapCut Pro ({ai_engine_mode})...")
             from capcut_draft_generator import create_capcut_draft
             from capcut_ui_controller import run_native_capcut_pro_pipeline
@@ -534,14 +552,12 @@ def main():
             # Create initial draft with Video (attenuated) + Old Sub Blur Mask
             draft_folder = create_capcut_draft(
                 project_name=f"Reup_{task_id}",
-                video_file=video_raw,
-                subtitles=[],
-                tts_segments=[],
-                custom_draft_dir=custom_draft_dir,
+                raw_video_path=video_raw,
+                tts_audio_segments=[],
+                settings=settings,
                 old_sub_box=old_sub_box,
-                blur_radius=int(settings.get("blurRadius", 25)),
-                orig_volume=float(settings.get("originalAudioVolume", 20)) / 100.0,
-                voice_volume=float(settings.get("voiceVolume", 100)) / 100.0,
+                new_sub_box=new_sub_box,
+                custom_draft_dir=custom_draft_dir
             )
 
             vip_voice = settings.get("capcutVipVoice", "Cô Gái Hoạt Ngôn")

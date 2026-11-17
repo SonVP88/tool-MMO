@@ -19,7 +19,7 @@ import queue
 import threading
 import subprocess
 from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 PORT = 5678
@@ -316,8 +316,50 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
-
         content_len = int(self.headers.get('Content-Length', 0))
+
+        # Handle binary upload before reading json
+        if path == "/api/upload":
+            qs = parse_qs(parsed.query)
+            filename = qs.get("filename", ["uploaded_video.mp4"])[0]
+            filename = os.path.basename(filename)
+            uploads_dir = BASE_DIR / "python-worker" / "temp" / "uploads"
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = uploads_dir / filename
+
+            with open(dest_path, "wb") as f:
+                remaining = content_len
+                chunk_size = 65536
+                while remaining > 0:
+                    read_bytes = min(remaining, chunk_size)
+                    chunk = self.rfile.read(read_bytes)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    remaining -= len(chunk)
+
+            base_id = int(time.time() * 1000)
+            name = Path(filename).stem
+            file_mb = round(os.path.getsize(dest_path) / (1024 * 1024), 2)
+            new_item = {
+                "id": base_id,
+                "name": name,
+                "source": str(dest_path.resolve()),
+                "stage": "Chờ chạy",
+                "progress": 0,
+                "status": "WAITING",
+                "note": f"Đã nhập video: {file_mb} MB",
+                "outputPath": f"C:\\Output\\Reup_{name}.mp4",
+                "selected": False
+            }
+            with task_lock:
+                active_tasks.append(new_item)
+            save_tasks_to_disk()
+            emit_live_log(f"+ Đã nhập file video: {filename} ({file_mb} MB) vào hàng đợi.", "success")
+            broadcast_event("task-added", new_item)
+            self.send_json({"status": "success", "task": new_item, "tasks": active_tasks})
+            return
+
         body = self.rfile.read(content_len).decode('utf-8') if content_len > 0 else "{}"
         try:
             req_data = json.loads(body)
@@ -325,6 +367,45 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
             req_data = {}
 
         global is_queue_running, is_queue_paused, current_process
+
+        if path == "/api/add_local_path":
+            input_path = req_data.get("path", "").strip()
+            added = []
+            base_id = int(time.time() * 1000)
+            if input_path and os.path.exists(input_path):
+                p = Path(input_path)
+                video_files = []
+                if p.is_dir():
+                    for ext in [".mp4", ".mkv", ".mov", ".ts", ".avi", ".webm", ".flv"]:
+                        video_files.extend(list(p.glob(f"*{ext}")))
+                elif p.is_file():
+                    video_files.append(p)
+
+                with task_lock:
+                    for idx, vf in enumerate(video_files):
+                        name = vf.stem
+                        file_mb = round(vf.stat().st_size / (1024 * 1024), 2)
+                        new_item = {
+                            "id": base_id + idx,
+                            "name": name,
+                            "source": str(vf.resolve()),
+                            "stage": "Chờ chạy",
+                            "progress": 0,
+                            "status": "WAITING",
+                            "note": f"File nội bộ ({file_mb} MB)",
+                            "outputPath": f"C:\\Output\\Reup_{name}.mp4",
+                            "selected": False
+                        }
+                        active_tasks.append(new_item)
+                        added.append(new_item)
+                save_tasks_to_disk()
+                emit_live_log(f"+ Đã quét và thêm {len(added)} file từ: {input_path}", "success")
+                self.send_json({"status": "success", "count": len(added), "tasks": active_tasks})
+                return
+            else:
+                emit_live_log(f"Đường dẫn không tồn tại: {input_path}", "error")
+                self.send_json({"status": "error", "message": f"Đường dẫn không tồn tại: {input_path}"}, 400)
+                return
 
         if path == "/api/add_tasks":
             items = req_data.get("items", [])
@@ -335,6 +416,27 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                     item_str = str(item).strip()
                     if not item_str:
                         continue
+                    # Check if it's an existing folder
+                    if os.path.exists(item_str) and os.path.isdir(item_str):
+                        p = Path(item_str)
+                        for ext in [".mp4", ".mkv", ".mov", ".ts", ".avi", ".webm"]:
+                            for vf in p.glob(f"*{ext}"):
+                                name = vf.stem
+                                new_item = {
+                                    "id": base_id + len(added),
+                                    "name": name,
+                                    "source": str(vf.resolve()),
+                                    "stage": "Chờ chạy",
+                                    "progress": 0,
+                                    "status": "WAITING",
+                                    "note": f"Từ thư mục {p.name}",
+                                    "outputPath": f"C:\\Output\\Reup_{name}.mp4",
+                                    "selected": False
+                                }
+                                active_tasks.append(new_item)
+                                added.append(new_item)
+                        continue
+
                     name = Path(item_str).stem or f"Video_{base_id + idx}"
                     new_item = {
                         "id": base_id + idx,
@@ -476,7 +578,7 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
 
 def run_server():
     load_initial_tasks()
-    server = HTTPServer(('127.0.0.1', PORT), StudioAPIHandler)
+    server = ThreadingHTTPServer(('127.0.0.1', PORT), StudioAPIHandler)
     print(f"[*] Studio MMO Local Bridge Server running on http://127.0.0.1:{PORT}", flush=True)
     server.serve_forever()
 
