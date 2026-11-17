@@ -923,24 +923,27 @@ def main():
             account_type = settings.get("capcutAccountType", "PRO")
 
             # Step 3, 4, 5: UI Automation (Auto Sub, Voice Sync, Export)
-            run_native_capcut_pro_pipeline(
-                project_name=f"Reup_{task_id}",
-                output_filename=f"Reup_{task_id}",
-                output_dir=output_dir,
-                ai_engine_mode=ai_engine_mode,
-                vip_voice=vip_voice,
-                sync_speed=sync_speed,
-                account_type=account_type,
-                capcut_exe_path=custom_capcut_exe,
-                progress_callback=lambda p, s, m: emit_progress(task_id, p, s, m),
-                gemini_key=gemini_key,
-                draft_folder=draft_folder
-            )
+            try:
+                run_native_capcut_pro_pipeline(
+                    project_name=f"Reup_{task_id}",
+                    output_filename=f"Reup_{task_id}",
+                    output_dir=output_dir,
+                    ai_engine_mode=ai_engine_mode,
+                    vip_voice=vip_voice,
+                    sync_speed=sync_speed,
+                    account_type=account_type,
+                    capcut_exe_path=custom_capcut_exe,
+                    progress_callback=lambda p, s, m: emit_progress(task_id, p, s, m),
+                    gemini_key=gemini_key,
+                    draft_folder=draft_folder
+                )
+            except Exception as e:
+                emit_progress(task_id, 88, "CapCut Cảnh Báo", f"CapCut UI chưa hoàn tất ({str(e)[:90]}). Chuyển sang FFmpeg để hoàn thiện video...")
 
             final_mp4 = output_dir / f"Reup_{task_id}.mp4"
             if not final_mp4.exists() or final_mp4.stat().st_size == 0:
                 # Guaranteed render fallback via FFmpeg if CapCut UI did not export file directly
-                emit_progress(task_id, 92, "Hoàn thiện Render", "Tối ưu hóa file xuất thành phẩm đảm bảo chất lượng cao nhất...")
+                emit_progress(task_id, 92, "Hoàn thiện Render", "Tối ưu hóa file xuất thành phẩm bằng FFmpeg siêu tốc...")
                 if not subtitles_trans:
                     subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key, gemini_key)
                     subtitles_trans = step_gemini_translation(task_id, subtitles, settings.get("genre", "Tự động"), settings.get("translationQuality", "Tự nhiên / văn nói"), gemini_key)
@@ -948,6 +951,8 @@ def main():
                 final_mp4 = step_render_video(
                     task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
                 )
+                emit_done(task_id, str(final_mp4.resolve()), f"CapCut chưa xuất được file, đã hoàn tất xuất video qua FFmpeg: {final_mp4.name}")
+                return
 
             emit_done(task_id, str(final_mp4.resolve()), f"Quy trình Tự Động Hóa CapCut Pro ({ai_engine_mode}) hoàn tất: {final_mp4.name}")
             return

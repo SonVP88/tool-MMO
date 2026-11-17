@@ -116,6 +116,28 @@ def find_capcut_main_window():
             return win
     return None
 
+def enter_project_editor(win, progress_callback=None):
+    """If CapCut is currently on Home / Project Selection screen, clicks into the project editor"""
+    if not auto or not win:
+        return
+    
+    # Check if already inside editor (has 'Text' or 'Văn bản' or 'Media' tab)
+    for tab_name in ["Text", "Văn bản", "Media", "Âm thanh", "Audio"]:
+        t = win.Control(searchDepth=6, SubName=tab_name)
+        if t.Exists(maxSearchSeconds=0.5):
+            return # Already inside Editor!
+
+    if progress_callback:
+        progress_callback(32, "Mở Dự Án", "[CapCut Pro] Đang mở dự án từ màn hình chính CapCut...")
+
+    # Look for project card or "Dự án mới" / "New project"
+    for hint in ["Reup_", "Dự án mới", "New project", "Bắt đầu tạo", "Start creating"]:
+        card = win.Control(searchDepth=8, SubName=hint)
+        if card.Exists(maxSearchSeconds=1):
+            card.Click()
+            time.sleep(2)
+            return
+
 def trigger_capcut_auto_captions(progress_callback=None) -> bool:
     """
     Step 2: Automates CapCut Pro Auto Captions:
@@ -410,6 +432,14 @@ def run_native_capcut_pro_pipeline(
 
         ensure_capcut_running(capcut_exe_path)
         time.sleep(2)
+
+        win = find_capcut_main_window()
+        if not win:
+            raise RuntimeError(
+                "Không tìm thấy phần mềm CapCut PC đang mở trên máy! Vui lòng mở sẵn CapCut PC trước khi bấm AUTO, hoặc chọn chế độ '⚡ FFmpeg Siêu Tốc (Chạy ngầm 100%)' để render trực tiếp."
+            )
+
+        enter_project_editor(win, osd_progress)
 
         # 1. Auto Subtitles
         if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":

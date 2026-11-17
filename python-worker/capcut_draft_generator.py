@@ -323,5 +323,38 @@ def create_capcut_draft(
     with open(project_dir / "draft_meta_info.json", "w", encoding="utf-8") as f:
         json.dump(draft_meta, f, ensure_ascii=False, indent=2)
 
+    # Update root_meta_info.json so CapCut Home screen indexes this project as #1
+    try:
+        root_file = base_draft_dir / "root_meta_info.json"
+        root_data = {"all_draft_store": []}
+        if root_file.exists():
+            try:
+                with open(root_file, "r", encoding="utf-8") as rf:
+                    root_data = json.load(rf)
+                    if not isinstance(root_data, dict):
+                        root_data = {"all_draft_store": []}
+            except Exception:
+                root_data = {"all_draft_store": []}
+
+        drafts = root_data.get("all_draft_store", [])
+        if not isinstance(drafts, list):
+            drafts = []
+        drafts = [d for d in drafts if isinstance(d, dict) and d.get("draft_id") != project_id and d.get("draft_name") != project_name]
+        drafts.insert(0, {
+            "draft_id": project_id,
+            "draft_name": project_name,
+            "draft_fold_path": str(project_dir.resolve()),
+            "draft_root_path": str(base_draft_dir.resolve()),
+            "tm_draft_create": now_us,
+            "tm_draft_modified": now_us,
+            "draft_cover": "",
+            "draft_timeline_materials_size_": 1
+        })
+        root_data["all_draft_store"] = drafts
+        with open(root_file, "w", encoding="utf-8") as rf:
+            json.dump(root_data, rf, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
     return project_dir
 
