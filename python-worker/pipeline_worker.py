@@ -468,6 +468,33 @@ def build_audio_filter_graph(settings: dict, orig_vol: float, voice_vol: float) 
             f"[a_orig][a_tts]amix=inputs=2:duration=first:dropout_transition=2[aout]"
         )
 
+def build_anti_copyright_filter_str(anti: dict) -> str:
+    """
+    Builds video filter chain for anti-copyright bypass:
+    - flipHorizontal: hflip
+    - cropZoom: scale and crop
+    - brightness, contrast, saturation: eq
+    - noiseOverlay: noise
+    """
+    if not anti:
+        return ""
+    filters = []
+    if anti.get("flipHorizontal", False):
+        filters.append("hflip")
+    zoom = float(anti.get("cropZoom", 100))
+    if zoom > 100:
+        factor = zoom / 100.0
+        filters.append(f"scale=trunc(iw*{factor}/2)*2:trunc(ih*{factor}/2)*2,crop=1280:720")
+    b = float(anti.get("brightness", 0)) / 100.0
+    c = float(anti.get("contrast", 1.0))
+    s = float(anti.get("saturation", 1.0))
+    if b != 0.0 or abs(c - 1.0) > 0.01 or abs(s - 1.0) > 0.01:
+        filters.append(f"eq=brightness={b:.2f}:contrast={c:.2f}:saturation={s:.2f}")
+    noise = int(anti.get("noiseOverlay", 0))
+    if noise > 0:
+        filters.append(f"noise=alls={noise}:allf=t+u")
+    return ",".join(filters)
+
 def step_render_video(
     task_id: int,
     raw_video: Path,
@@ -477,7 +504,8 @@ def step_render_video(
     output_dir: Path,
     settings: dict,
     old_sub_box: dict,
-    new_sub_box: dict
+    new_sub_box: dict,
+    anti_settings: dict = None
 ) -> Path:
     emit_progress(task_id, 82, "Render video", "Tạo file phụ đề và cấu hình bộ lọc...")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -552,12 +580,23 @@ def step_render_video(
     enc_name, enc_flags, enc_label = detect_gpu_encoder(ffmpeg_exe)
     emit_progress(task_id, 90, "Render video", f"Tăng tốc phần cứng FFmpeg: {enc_label}")
 
+    anti_filter = build_anti_copyright_filter_str(anti_settings)
+    anti_part = f",{anti_filter}" if anti_filter else ""
+
+    anti_flags = []
+    if anti_settings:
+        if anti_settings.get("stripMetadata", True):
+            anti_flags += ["-map_metadata", "-1"]
+        if anti_settings.get("randomizeMd5", True):
+            import uuid
+            anti_flags += ["-metadata", f"comment=mmo_{uuid.uuid4().hex[:10]}"]
+
     if subtitles and voice_wav and voice_wav.exists():
         audio_filter_part = build_audio_filter_graph(settings, orig_vol, voice_vol)
         filter_complex = (
             f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_luma}:1:{blur_chroma}:1[blurred];"
             f"[0:v][blurred]overlay=x={bx}:y={by}[vblurred];"
-            f"[vblurred]subtitles=filename='{srt_rel}':force_style='FontSize={font_size},PrimaryColour={text_color_ass},OutlineColour={stroke_color_ass},MarginV={margin_v}'[vout];"
+            f"[vblurred]subtitles=filename='{srt_rel}':force_style='FontSize={font_size},PrimaryColour={text_color_ass},OutlineColour={stroke_color_ass},MarginV={margin_v}'{anti_part}[vout];"
             f"{audio_filter_part}"
         )
         cmd = [
@@ -567,14 +606,14 @@ def step_render_video(
             "-filter_complex", filter_complex,
             "-map", "[vout]",
             "-map", "[aout]",
-        ] + enc_flags + [
+        ] + enc_flags + anti_flags + [
             "-c:a", "aac", "-b:a", "192k",
             str(final_output)
         ]
     else:
         filter_complex = (
             f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_luma}:1:{blur_chroma}:1[blurred];"
-            f"[0:v][blurred]overlay=x={bx}:y={by}[vout]"
+            f"[0:v][blurred]overlay=x={bx}:y={by}{anti_part}[vout]"
         )
         cmd = [
             ffmpeg_exe, "-y",
@@ -582,7 +621,7 @@ def step_render_video(
             "-filter_complex", filter_complex,
             "-map", "[vout]",
             "-map", "0:a?",
-        ] + enc_flags + [
+        ] + enc_flags + anti_flags + [
             "-c:a", "copy",
             str(final_output)
         ]
@@ -596,27 +635,139 @@ def step_render_video(
                 ffmpeg_exe, "-y",
                 "-i", str(raw_video),
                 "-i", str(voice_wav),
-                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vblurred];[vblurred]subtitles=filename='{srt_rel}'[vout];{audio_filter_part}",
+                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vblurred];[vblurred]subtitles=filename='{srt_rel}'{anti_part}[vout];{audio_filter_part}",
                 "-map", "[vout]",
                 "-map", "[aout]",
                 "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
+            ] + anti_flags + [
                 str(final_output)
             ]
         else:
             cmd_fallback = [
                 ffmpeg_exe, "-y",
                 "-i", str(raw_video),
-                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vout]",
+                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}{anti_part}[vout]",
                 "-map", "[vout]",
                 "-map", "0:a?",
                 "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                 "-c:a", "copy",
+            ] + anti_flags + [
                 str(final_output)
             ]
         subprocess.run(cmd_fallback, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     emit_progress(task_id, 98, "Render video", f"Tạo file thành công ({enc_name}): {final_output.name}")
+    return final_output
+
+# ==================== STEP 6: PRODUCE AUDIO NOVEL & PODCAST ====================
+def step_produce_audio_novel(
+    task_id: int,
+    source_str: str,
+    temp_dir: Path,
+    output_dir: Path,
+    settings: dict,
+    extra_config: dict
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    title = extra_config.get("title", f"Truyen_{task_id}").strip()
+    clean_title = re.sub(r'[^a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9 ]', '', title).replace(" ", "_")[:30]
+    final_output = output_dir / f"Audio_{clean_title}.mp4"
+
+    txt_file = Path(source_str.replace("audio_novel:", "").strip())
+    if not txt_file.exists():
+        raise FileNotFoundError(f"Không tìm thấy file truyện chữ: {txt_file}")
+
+    with open(txt_file, "r", encoding="utf-8") as f:
+        story_content = f.read().strip()
+
+    word_count = len(story_content.split())
+    emit_progress(task_id, 15, "Phân tích văn bản", f"Tách đoạn và chuẩn bị lồng tiếng ({word_count} từ)...")
+
+    voice = extra_config.get("voice", settings.get("voice", "Nam Miền Bắc Trầm Ấm (vi-VN)"))
+    speed = float(extra_config.get("speed", settings.get("speed", 1.1)))
+    bgm_vol = float(extra_config.get("bgm_volume", 12)) / 100.0
+
+    voice_code_map = {
+        "Nam Miền Bắc Trầm Ấm (vi-VN)": "vi-VN-NamMinhNeural",
+        "Nam Trầm Ấm (Nam VIP)": "vi-VN-NamMinhNeural",
+        "Nam Trầm Ấm": "vi-VN-NamMinhNeural",
+        "Cô Gái Hoạt Ngôn (vi-VN)": "vi-VN-HoaiMyNeural",
+        "Cô Gái Hoạt Ngôn (Free)": "vi-VN-HoaiMyNeural",
+        "Cô Gái Hoạt Ngôn": "vi-VN-HoaiMyNeural",
+        "Nữ Nhẹ Nhàng (vi-VN)": "vi-VN-HoaiMyNeural",
+        "Nam Miền Nam Truyền Cảm (vi-VN)": "vi-VN-NamMinhNeural",
+        "Giọng Trầm Kể Chuyện (vi-VN)": "vi-VN-NamMinhNeural",
+        "Chị Google": "vi-VN-HoaiMyNeural",
+    }
+    v_code = voice_code_map.get(voice, "vi-VN-NamMinhNeural")
+
+    emit_progress(task_id, 35, "Lồng tiếng AI", f"Tổng hợp giọng đọc truyền cảm ({voice})...")
+    rate_str = f"+{int((speed - 1.0) * 100)}%" if speed >= 1.0 else f"-{int((1.0 - speed) * 100)}%"
+    voice_mp3 = temp_dir / f"story_voice_{task_id}.mp3"
+
+    cmd_tts = [
+        sys.executable, "-m", "edge_tts",
+        "--voice", v_code,
+        "--rate", rate_str,
+        "--text", story_content,
+        "--write-media", str(voice_mp3)
+    ]
+    subprocess.run(cmd_tts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+    # Probe duration
+    ffmpeg_exe = get_ffmpeg_path()
+    dur_cmd = [ffmpeg_exe, "-i", str(voice_mp3)]
+    p_dur = subprocess.run(dur_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", p_dur.stderr)
+    total_sec = 60.0
+    if m:
+        total_sec = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) + 1.0
+
+    emit_progress(task_id, 65, "Tạo BGM & Background", f"Trộn nhạc nền du dương ({int(total_sec)}s) và thiết kế khung hình 1080p...")
+
+    enc_name, enc_flags, enc_label = detect_gpu_encoder(ffmpeg_exe)
+    safe_title = title.replace("'", "").replace(":", "")[:35]
+
+    cmd_render = [
+        ffmpeg_exe, "-y",
+        "-f", "lavfi", "-i", f"color=c=#0b1120:s=1280x720:d={total_sec:.2f}",
+        "-i", str(voice_mp3),
+        "-filter_complex", (
+            f"[0:v]drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='{safe_title}':fontsize=42:fontcolor=#f59e0b:x=(w-text_w)/2:y=200,"
+            f"drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='SẢN XUẤT TRUYỆN AUDIO & PODCAST AI':fontsize=20:fontcolor=#94a3b8:x=(w-text_w)/2:y=265[vout];"
+            f"aevalsrc=sin(220*2*PI*t)*0.012+sin(330*2*PI*t)*0.008:d={total_sec:.2f}[bgm];"
+            f"[bgm]volume={bgm_vol}[bgm_low];"
+            f"[bgm_low][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+        ),
+        "-map", "[vout]",
+        "-map", "[aout]",
+    ] + enc_flags + [
+        "-c:a", "aac", "-b:a", "192k",
+        str(final_output)
+    ]
+
+    emit_progress(task_id, 85, "Render hoàn thiện", f"Tăng tốc phần cứng FFmpeg: {enc_label}")
+    subprocess.run(cmd_render, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    if not final_output.exists() or final_output.stat().st_size == 0:
+        cmd_fb = [
+            ffmpeg_exe, "-y",
+            "-f", "lavfi", "-i", f"color=c=#0b1120:s=1280x720:d={total_sec:.2f}",
+            "-i", str(voice_mp3),
+            "-filter_complex", (
+                f"[0:v]drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='{safe_title}':fontsize=38:fontcolor=#f59e0b:x=(w-text_w)/2:y=200[vout];"
+                f"[1:a]volume=1.0[aout]"
+            ),
+            "-map", "[vout]",
+            "-map", "[aout]",
+            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            str(final_output)
+        ]
+        subprocess.run(cmd_fb, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    emit_progress(task_id, 100, "Hoàn tất", f"Xuất video Truyện Audio thành công: {final_output.name}")
     return final_output
 
 # ==================== MAIN DISPATCHER ====================
@@ -649,6 +800,15 @@ def main():
 
     try:
         emit_progress(task_id, 0, "Khởi chạy", f"Bắt đầu quy trình xử lý tác vụ #{task_id}")
+
+        anti_settings = config.get("anti_copyright", config.get("antiCopyright", settings.get("antiCopyright", {})))
+
+        # Step 0: Check if this is an Audio Novel production task
+        if source.startswith("audio_novel:") or source.endswith(".txt"):
+            extra_cfg = config.get("extra_config", {})
+            out_file = step_produce_audio_novel(task_id, source, temp_dir, output_dir, settings, extra_cfg)
+            emit_done(task_id, str(out_file.resolve()), f"Sản xuất Video Truyện Audio thành công: {out_file.name}")
+            return
 
         # Step 1: Input / Download
         video_raw = step_download_or_copy(task_id, source, temp_dir, cookie_data)
@@ -740,7 +900,7 @@ def main():
                     subtitles_trans = step_gemini_translation(task_id, subtitles, settings.get("genre", "Tự động"), settings.get("translationQuality", "Tự nhiên / văn nói"), gemini_key)
                     voice_wav = step_tts_synthesis(task_id, subtitles_trans, temp_dir, settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)"), float(settings.get("speed", 1.0)))
                 final_mp4 = step_render_video(
-                    task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box
+                    task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
                 )
 
             emit_done(task_id, str(final_mp4.resolve()), f"Quy trình Tự Động Hóa CapCut Pro ({ai_engine_mode}) hoàn tất: {final_mp4.name}")
@@ -832,14 +992,14 @@ def main():
 
             # Also produce guaranteed final MP4
             final_video = step_render_video(
-                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box
+                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
             )
             emit_done(task_id, str(final_video.resolve()), "Tự động hóa CapCut và render video hoàn tất.")
 
         else:
             # Default: FFmpeg Super Fast
             final_video = step_render_video(
-                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box
+                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
             )
             emit_done(task_id, str(final_video.resolve()), "Render video và hoàn tất toàn bộ quy trình")
 

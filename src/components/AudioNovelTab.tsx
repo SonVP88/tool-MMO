@@ -4,12 +4,13 @@ import {
   BookOpen, 
   Music, 
   Play, 
-  Upload
+  Upload,
+  Sparkles
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 
 export const AudioNovelTab: React.FC = () => {
-  const { addLog, addTask } = useStudioStore();
+  const { addLog, outputDir, setStudioMode } = useStudioStore();
 
   const [storyText, setStoryText] = useState(
     `Chương 1: Trọng Sinh Về Năm 2008.\n\nTiêu Viêm mở mắt ra, nhìn thấy trần nhà bong tróc quen thuộc của căn phòng trọ hai mươi mét vuông năm nào.\n\n"Chẳng lẽ... mình đã thật sự trở lại?"\n\nHắn đưa tay sờ lên khuôn mặt vẫn còn non nớt của tuổi mười tám, tim đập thình thịch liên hồi. Đời trước, hắn bỏ lỡ quá nhiều cơ hội, để mặc gia đình rơi vào cảnh khốn cùng, người yêu rời xa trong tuyệt vọng.\n\nNhưng đời này đã khác! Nắm giữ ký ức của mười sáu năm tương lai, hắn thề sẽ làm lại tất cả từ đầu, leo lên đỉnh cao của thương trường và nắm giữ vận mệnh trong tay mình!`
@@ -20,10 +21,63 @@ export const AudioNovelTab: React.FC = () => {
   const [bgVideo, setBgVideo] = useState('Video Phong Cảnh Anime 4K (Loop)');
   const [voice, setVoice] = useState('Nam Miền Bắc Trầm Ấm (vi-VN)');
   const [speed, setSpeed] = useState(1.10);
+  const [isProducing, setIsProducing] = useState(false);
 
-  const handleStartProduce = () => {
-    addLog('Khởi tạo quy trình: Phân tích văn bản truyện chữ -> Chia đoạn TTS -> Trộn BGM -> Xuất Video Audio...', 'success');
-    addTask('Chuong_01_Trong_Sinh_2008', 'C:\\Output\\Audio_Chuong_01.mp4');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        if (text) {
+          setStoryText(text);
+          addLog(`Đã nạp thành công file truyện "${file.name}" (${text.split(/\s+/).length} từ).`, 'success');
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
+  };
+
+  const handleStartProduce = async () => {
+    if (!storyText.trim()) {
+      addLog('Vui lòng nhập hoặc dán nội dung chương truyện!', 'warn');
+      return;
+    }
+    const firstLine = storyText.split('\n')[0].replace(/[^a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9 ]/g, '').trim();
+    const cleanTitle = firstLine.slice(0, 35) || 'Chuong_Truyen';
+
+    setIsProducing(true);
+    addLog(`Đang gửi yêu cầu sản xuất Video Truyện Audio: "${cleanTitle}"...`, 'info');
+
+    try {
+      const res = await fetch('http://127.0.0.1:5678/api/produce_audio_novel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: cleanTitle,
+          storyText: storyText,
+          voice: voice,
+          speed: speed,
+          bgmVolume: bgmVolume,
+          bgmTrack: bgmTrack,
+          bgVideo: bgVideo,
+          outputDir: outputDir || 'C:\\Output',
+        }),
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        addLog(`✔ Đã nạp dự án "${cleanTitle}" vào hàng đợi sản xuất! Đang mở bảng điều khiển...`, 'success');
+        setStudioMode('REUP');
+      } else {
+        addLog(`Lỗi tạo dự án: ${data.message || 'Không xác định'}`, 'error');
+      }
+    } catch (err: any) {
+      addLog(`Lỗi kết nối máy chủ: ${err.message}`, 'error');
+    } finally {
+      setIsProducing(false);
+    }
   };
 
   return (
@@ -46,10 +100,11 @@ export const AudioNovelTab: React.FC = () => {
 
         <button
           onClick={handleStartProduce}
-          className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all"
+          disabled={isProducing}
+          className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all disabled:opacity-50"
         >
-          <Play className="w-4 h-4 fill-white" />
-          Tạo Video Truyện Audio Ngay
+          {isProducing ? <Sparkles className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-white" />}
+          {isProducing ? 'Đang Khởi Tạo...' : 'Tạo Video Truyện Audio Ngay'}
         </button>
       </div>
 
@@ -61,9 +116,16 @@ export const AudioNovelTab: React.FC = () => {
               <BookOpen className="w-4 h-4 text-emerald-400" />
               Nội Dung Chương Truyện (Văn bản thuần):
             </span>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".txt"
+              className="hidden"
+            />
             <button
-              onClick={() => addLog('Đã chọn file text chương truyện (.txt)', 'info')}
-              className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-[11px] text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 cursor-pointer"
             >
               <Upload className="w-3 h-3" />
               Nạp File .TXT

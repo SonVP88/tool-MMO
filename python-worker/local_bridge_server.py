@@ -368,6 +368,46 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
             self.send_json(profiles)
             return
 
+        if path == "/api/subtitles":
+            qs = parse_qs(parsed.query)
+            t_id = qs.get("task_id", [""])[0]
+            if not t_id:
+                self.send_json({"status": "error", "message": "Missing task_id"}, 400)
+                return
+
+            srt_file = BASE_DIR / "python-worker" / "temp" / f"task_{t_id}" / f"subtitles_{t_id}.srt"
+            if not srt_file.exists():
+                found = list((BASE_DIR / "python-worker" / "temp").glob(f"**/subtitles_{t_id}.srt"))
+                if found:
+                    srt_file = found[0]
+
+            if srt_file.exists():
+                subs = parse_srt_to_list(srt_file)
+                self.send_json({"status": "success", "subtitles": subs})
+            else:
+                self.send_json({"status": "not_transcribed", "subtitles": []})
+            return
+
+        if path == "/api/preview_audio":
+            qs = parse_qs(parsed.query)
+            filename = qs.get("file", [""])[0]
+            if not filename:
+                self.send_json({"error": "Missing file"}, 400)
+                return
+            audio_path = BASE_DIR / "python-worker" / "temp" / "preview_cache" / os.path.basename(filename)
+            if not audio_path.exists():
+                self.send_json({"error": "Not found"}, 404)
+                return
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'audio/mpeg')
+            self.send_header('Content-Length', str(os.path.getsize(audio_path)))
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            with open(audio_path, 'rb') as f:
+                shutil.copyfileobj(f, self.wfile, length=65536)
+            return
+
         self.send_json({"status": "not_found"}, 404)
 
     def do_POST(self):
@@ -417,7 +457,11 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
             self.send_json({"status": "success", "task": new_item, "tasks": active_tasks})
             return
 
-        body = self.rfile.read(content_len).decode('utf-8') if content_len > 0 else "{}"
+        raw_bytes = self.rfile.read(content_len) if content_len > 0 else b""
+        try:
+            body = raw_bytes.decode('utf-8')
+        except Exception:
+            body = raw_bytes.decode('utf-8', errors='replace')
         try:
             req_data = json.loads(body)
         except Exception:
@@ -685,6 +729,131 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                 self.send_json({"status": "canceled", "folder": ""})
             return
 
+        if path == "/api/preview_voice":
+            text = req_data.get("text", "").strip()
+            voice = req_data.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)")
+            speed = float(req_data.get("speed", 1.0))
+
+            if not text:
+                self.send_json({"status": "error", "message": "Nội dung văn bản trống"}, 400)
+                return
+
+            voice_code_map = {
+                "Cô Gái Hoạt Ngôn (vi-VN)": "vi-VN-HoaiMyNeural",
+                "Cô Gái Hoạt Ngôn (Free)": "vi-VN-HoaiMyNeural",
+                "Cô Gái Hoạt Ngôn": "vi-VN-HoaiMyNeural",
+                "Nam Miền Bắc Trầm Ấm (vi-VN)": "vi-VN-NamMinhNeural",
+                "Nam Trầm Ấm (Nam VIP)": "vi-VN-NamMinhNeural",
+                "Nam Trầm Ấm": "vi-VN-NamMinhNeural",
+                "Nam Miền Nam Truyền Cảm (vi-VN)": "vi-VN-NamMinhNeural",
+                "Nam Miền Nam Truyền Cảm": "vi-VN-NamMinhNeural",
+                "Nữ Nhẹ Nhàng (vi-VN)": "vi-VN-HoaiMyNeural",
+                "Giọng Trầm Kể Chuyện (vi-VN)": "vi-VN-NamMinhNeural",
+                "Chị Google": "vi-VN-HoaiMyNeural",
+            }
+            v_code = voice_code_map.get(voice, "vi-VN-HoaiMyNeural")
+            import hashlib
+            h = hashlib.md5(f"{text}_{v_code}_{speed}".encode('utf-8')).hexdigest()
+            cache_dir = BASE_DIR / "python-worker" / "temp" / "preview_cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            mp3_out = cache_dir / f"prev_{h}.mp3"
+
+            if not mp3_out.exists() or mp3_out.stat().st_size == 0:
+                rate_str = f"+{int((speed - 1.0) * 100)}%" if speed >= 1.0 else f"-{int((1.0 - speed) * 100)}%"
+                cmd = [
+                    sys.executable, "-m", "edge_tts",
+                    "--voice", v_code,
+                    "--rate", rate_str,
+                    "--text", text,
+                    "--write-media", str(mp3_out)
+                ]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
+
+            if mp3_out.exists() and mp3_out.stat().st_size > 0:
+                self.send_json({"status": "success", "audio_url": f"http://127.0.0.1:{PORT}/api/preview_audio?file=prev_{h}.mp3"})
+            else:
+                self.send_json({"status": "error", "message": "Không thể sinh giọng đọc thử"}, 500)
+            return
+
+        if path == "/api/produce_audio_novel":
+            title = req_data.get("title", "Chuong_Truyen").strip()
+            story_text = req_data.get("storyText", "").strip()
+            voice = req_data.get("voice", "Nam Miền Bắc Trầm Ấm (vi-VN)")
+            speed = float(req_data.get("speed", 1.1))
+            bgm_track = req_data.get("bgmTrack", "Nhạc Cổ Phong")
+            bgm_volume = int(req_data.get("bgmVolume", 12))
+            bg_video = req_data.get("bgVideo", "Video Phong Cảnh Anime 4K (Loop)")
+            output_dir = req_data.get("outputDir", "C:\\Output")
+
+            base_id = int(time.time() * 1000)
+            novels_dir = BASE_DIR / "python-worker" / "temp" / "novels"
+            novels_dir.mkdir(parents=True, exist_ok=True)
+            txt_path = novels_dir / f"story_{base_id}.txt"
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(story_text)
+
+            clean_name = title.replace(" ", "_")[:30]
+            new_item = {
+                "id": base_id,
+                "name": f"Truyen_{clean_name}",
+                "source": f"audio_novel:{txt_path.resolve()}",
+                "stage": "Chờ chạy",
+                "progress": 0,
+                "status": "WAITING",
+                "note": f"Truyện Audio: {voice}",
+                "outputPath": f"{output_dir}\\Audio_{clean_name}.mp4",
+                "selected": False,
+                "extra_config": {
+                    "voice": voice,
+                    "speed": speed,
+                    "bgm_volume": bgm_volume,
+                    "bgm_track": bgm_track,
+                    "bg_video": bg_video,
+                    "title": title
+                }
+            }
+            with task_lock:
+                active_tasks.append(new_item)
+            save_tasks_to_disk()
+            emit_live_log(f"+ Đã tạo dự án sản xuất Video Truyện Audio: {title}", "success")
+            broadcast_event("task-added", new_item)
+            self.send_json({"status": "success", "task": new_item})
+            return
+
+        if path == "/api/save_subtitles":
+            task_id = req_data.get("task_id")
+            subtitles = req_data.get("subtitles", [])
+            task_dir = BASE_DIR / "python-worker" / "temp" / f"task_{task_id}"
+            task_dir.mkdir(parents=True, exist_ok=True)
+            srt_path = task_dir / f"subtitles_{task_id}.srt"
+
+            with open(srt_path, "w", encoding="utf-8") as f:
+                for s in subtitles:
+                    f.write(f"{s['index']}\n")
+                    f.write(f"{s['start']} --> {s['end']}\n")
+                    f.write(f"{s.get('translatedText', s.get('originalText', ''))}\n\n")
+
+            emit_live_log(f"Đã lưu cập nhật {len(subtitles)} dòng phụ đề cho Video #{task_id}", "success")
+            self.send_json({"status": "success"})
+            return
+
+        if path == "/api/merge_full_audio":
+            task_id = req_data.get("task_id")
+            output_dir = Path(req_data.get("output_dir", "C:\\Output"))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            task_dir = BASE_DIR / "python-worker" / "temp" / f"task_{task_id}"
+            
+            # Find audio segments or combined voice
+            merged_mp3 = output_dir / f"Full_Audio_{task_id}.mp3"
+            voice_wav = task_dir / f"voice_{task_id}.wav"
+            if voice_wav.exists():
+                shutil.copy(voice_wav, merged_mp3)
+                emit_live_log(f"Đã xuất file âm thanh hoàn chỉnh: {merged_mp3}", "success")
+                self.send_json({"status": "success", "path": str(merged_mp3)})
+            else:
+                self.send_json({"status": "error", "message": "Chưa có file âm thanh cho tác vụ này"}, 400)
+            return
+
         if path == "/api/open_file":
             p = req_data.get("path", "")
             if p and os.path.exists(p) and sys.platform == "win32":
@@ -693,6 +862,34 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
             return
 
         self.send_json({"status": "bad_request"}, 400)
+
+def parse_srt_to_list(srt_path):
+    if not os.path.exists(srt_path):
+        return []
+    subs = []
+    with open(srt_path, "r", encoding="utf-8") as f:
+        content = f.read().strip()
+    blocks = content.split("\n\n")
+    for b in blocks:
+        lines = b.strip().split("\n")
+        if len(lines) >= 3:
+            try:
+                idx = int(lines[0].strip())
+                times = lines[1].split("-->")
+                start = times[0].strip()
+                end = times[1].strip()
+                text = " ".join(lines[2:]).strip()
+                subs.append({
+                    "index": idx,
+                    "start": start,
+                    "end": end,
+                    "originalText": text,
+                    "translatedText": text,
+                    "speaker": "Cô Gái Hoạt Ngôn (vi-VN)"
+                })
+            except Exception:
+                pass
+    return subs
 
 def run_server():
     load_initial_tasks()

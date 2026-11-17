@@ -225,6 +225,19 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     capcutExePath: '%LOCALAPPDATA%\\CapCut\\Apps\\CapCut.exe',
     audioFilterMode: 'vocal_cut',
     audioDenoise: true,
+    antiCopyright: {
+      flipHorizontal: true,
+      cropZoom: 104,
+      brightness: 2,
+      contrast: 1.05,
+      saturation: 1.10,
+      noiseOverlay: 2,
+      watermarkPath: '',
+      introPath: '',
+      outroPath: '',
+      stripMetadata: true,
+      randomizeMd5: true,
+    },
   },
 
   logs: [

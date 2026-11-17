@@ -11,24 +11,28 @@ import { useStudioStore } from '../store/useStudioStore';
 import type { AntiCopyrightSettings } from '../types';
 
 export const ReupStudioTab: React.FC = () => {
-  const { addLog } = useStudioStore();
+  const { settings: globalSettings, updateSettings, triggerAutoSave, addLog } = useStudioStore();
 
-  const [settings, setSettings] = useState<AntiCopyrightSettings>({
-    flipHorizontal: true,
-    cropZoom: 104,
-    brightness: 2,
-    contrast: 1.05,
-    saturation: 1.10,
-    noiseOverlay: 2,
-    watermarkPath: 'C:\\Assets\\logo_channel.png',
-    introPath: 'C:\\Assets\\intro_3s.mp4',
-    outroPath: 'C:\\Assets\\outro_5s.mp4',
-    stripMetadata: true,
-    randomizeMd5: true,
-  });
+  const [settings, setSettings] = useState<AntiCopyrightSettings>(
+    globalSettings.antiCopyright || {
+      flipHorizontal: true,
+      cropZoom: 104,
+      brightness: 2,
+      contrast: 1.05,
+      saturation: 1.10,
+      noiseOverlay: 2,
+      watermarkPath: '',
+      introPath: '',
+      outroPath: '',
+      stripMetadata: true,
+      randomizeMd5: true,
+    }
+  );
 
   const handleApply = () => {
-    addLog('Đã áp dụng thông số Lách Bản Quyền (Anti-Copyright) vào toàn bộ chuỗi FFmpeg/CapCut.', 'success');
+    updateSettings({ antiCopyright: settings });
+    triggerAutoSave();
+    addLog('✔ Đã kích hoạt bộ lọc Lách Bản Quyền (Anti-Copyright) vào quy trình render thật!', 'success');
   };
 
   return (

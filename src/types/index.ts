@@ -54,6 +54,7 @@ export interface BatchSettings {
   capcutExePath: string;
   audioFilterMode?: 'vocal_cut' | 'ducking' | 'mute_original' | 'mix_normal';
   audioDenoise?: boolean;
+  antiCopyright?: AntiCopyrightSettings;
 }
 
 export interface StudioProfile {

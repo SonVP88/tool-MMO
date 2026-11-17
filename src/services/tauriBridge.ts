@@ -223,6 +223,7 @@ export async function apiSaveCurrentSettings(
     groq_api_key: groqKey,
     douyin_cookie: douyinCookie,
     output_dir: outputDir,
+    anti_copyright: settings.antiCopyright,
   };
   return await invokeCommand<string>('save_current_settings', { settings: payload });
 }
