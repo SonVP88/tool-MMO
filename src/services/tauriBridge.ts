@@ -310,3 +310,16 @@ export async function apiAddLocalPath(path: string): Promise<any> {
     return null;
   }
 }
+
+export async function apiTestApiKey(type: 'gemini' | 'groq', key: string): Promise<any> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/test_api_key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, key }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { valid: false, message: err?.message || 'Không thể kết nối đến máy chủ bridge' };
+  }
+}

@@ -284,6 +284,63 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                         event_subscribers.remove(q)
             return
 
+        if path == "/api/video_stream":
+            qs = parse_qs(parsed.query)
+            file_path = qs.get("path", [""])[0]
+            if not file_path or not os.path.exists(file_path):
+                # Search candidate paths
+                cand = BASE_DIR / "sample_video.mp4"
+                if not cand.exists():
+                    cand = BASE_DIR / "python-worker" / "temp" / "sample_video.mp4"
+                if cand.exists():
+                    file_path = str(cand)
+                else:
+                    self.send_json({"error": "Video not found"}, 404)
+                    return
+
+            try:
+                stat = os.stat(file_path)
+                file_size = stat.st_size
+                range_header = self.headers.get('Range', None)
+
+                if range_header:
+                    ranges = range_header.replace('bytes=', '').split('-')
+                    start = int(ranges[0]) if ranges[0] else 0
+                    end = int(ranges[1]) if ranges[1] else file_size - 1
+                    end = min(end, file_size - 1)
+                    content_length = end - start + 1
+
+                    self.send_response(206)
+                    self.send_header('Content-Type', 'video/mp4')
+                    self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
+                    self.send_header('Content-Length', str(content_length))
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+
+                    with open(file_path, 'rb') as f:
+                        f.seek(start)
+                        remaining = content_length
+                        while remaining > 0:
+                            chunk = f.read(min(remaining, 65536))
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            remaining -= len(chunk)
+                else:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'video/mp4')
+                    self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Content-Length', str(file_size))
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+
+                    with open(file_path, 'rb') as f:
+                        shutil.copyfileobj(f, self.wfile, length=65536)
+            except Exception:
+                pass
+            return
+
         if path == "/api/tasks":
             with task_lock:
                 self.send_json(active_tasks)
@@ -367,6 +424,46 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
             req_data = {}
 
         global is_queue_running, is_queue_paused, current_process
+
+        if path == "/api/test_api_key":
+            key_type = req_data.get("type", "gemini")
+            api_key = req_data.get("key", "").strip()
+
+            if not api_key:
+                self.send_json({"valid": False, "message": "Vui lòng nhập khóa API trước khi kiểm tra."}, 400)
+                return
+
+            import urllib.request
+            if key_type == "gemini":
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    req_payload = json.dumps({"contents": [{"parts": [{"text": "ping"}]}]}).encode('utf-8')
+                    req = urllib.request.Request(url, data=req_payload, headers={"Content-Type": "application/json"}, method="POST")
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        if resp.status == 200:
+                            emit_live_log("✔ Kiểm tra Gemini 2.5 Flash API Key: Kết nối thành công!", "success")
+                            self.send_json({"valid": True, "model": "gemini-2.5-flash", "message": "Kết nối Gemini 2.5 Flash thành công!"})
+                            return
+                except Exception as e:
+                    emit_live_log(f"✖ Kiểm tra Gemini API Key thất bại: {e}", "error")
+                    self.send_json({"valid": False, "message": f"Lỗi Gemini: {str(e)[:120]}"}, 400)
+                    return
+            elif key_type == "groq":
+                try:
+                    url = "https://api.groq.com/openai/v1/models"
+                    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"}, method="GET")
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        if resp.status == 200:
+                            emit_live_log("✔ Kiểm tra Groq Whisper API Key: Kết nối thành công!", "success")
+                            self.send_json({"valid": True, "model": "whisper-large-v3", "message": "Kết nối Groq Whisper thành công!"})
+                            return
+                except Exception as e:
+                    emit_live_log(f"✖ Kiểm tra Groq API Key thất bại: {e}", "error")
+                    self.send_json({"valid": False, "message": f"Lỗi Groq: {str(e)[:120]}"}, 400)
+                    return
+
+            self.send_json({"valid": False, "message": "Loại API không hỗ trợ."}, 400)
+            return
 
         if path == "/api/add_local_path":
             input_path = req_data.get("path", "").strip()

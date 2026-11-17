@@ -18,6 +18,7 @@ export const BatchSettingsForm: React.FC = () => {
   const {
     settings,
     updateSettings,
+    geminiApiKey,
     setTranslationConfigOpen,
     setCapCutConfigOpen,
     setCharacterModalOpen,
@@ -188,10 +189,15 @@ export const BatchSettingsForm: React.FC = () => {
 
         <button
           onClick={() => setTranslationConfigOpen(true)}
-          className="py-1.5 px-2 bg-[#1b2738] hover:bg-[#25354d] text-slate-200 border border-[#2d3e56] rounded-md font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm text-xs"
+          className="py-1.5 px-2 bg-[#1b2738] hover:bg-[#25354d] text-slate-200 border border-[#2d3e56] rounded-md font-semibold flex items-center justify-between transition-colors shadow-sm text-xs cursor-pointer"
         >
-          <Settings className="w-3.5 h-3.5 text-slate-400" />
-          Cấu Hình Dịch...
+          <div className="flex items-center gap-1.5">
+            <Settings className="w-3.5 h-3.5 text-amber-400" />
+            <span>Cấu Hình API Dịch</span>
+          </div>
+          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${geminiApiKey ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40' : 'bg-amber-950/80 text-amber-400 border border-amber-500/40'}`}>
+            {geminiApiKey ? 'Gemini 2.5 Active' : 'Chưa nhập Key'}
+          </span>
         </button>
       </div>
 

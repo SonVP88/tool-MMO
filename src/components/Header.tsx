@@ -27,6 +27,7 @@ export const Header: React.FC = () => {
     setCurrentProfile,
     addProfile,
     autoSaveTime,
+    triggerAutoSave,
     addLog,
   } = useStudioStore();
 
@@ -42,7 +43,8 @@ export const Header: React.FC = () => {
     'Trang chủ',
   ];
 
-  const handleSaveConfig = () => {
+  const handleSaveConfig = async () => {
+    await triggerAutoSave();
     addLog(`Đã lưu thành công cấu hình cho profile "${currentProfile}"`, 'success');
   };
 

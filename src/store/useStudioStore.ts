@@ -137,9 +137,9 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   currentProfile: 'Mặc định',
   autoSaveTime: '11:31:09',
 
-  geminiApiKey: 'AIzaSyD-mock-gemini-pro-key-auto',
-  groqApiKey: 'gsk_mock_whisper_groq_fast_key',
-  douyinCookie: 'odin_tt=1a2b3c...; sessionid_ss=8f9a0...;',
+  geminiApiKey: '',
+  groqApiKey: '',
+  douyinCookie: '',
   outputDir: 'C:\\Output',
 
   isAddVideoModalOpen: false,
@@ -322,6 +322,33 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         profiles: profiles.map((p) => p.name),
         currentProfile: profiles[0].name,
       });
+    }
+
+    // 1b. Load settings from backend
+    try {
+      const res = await fetch('http://127.0.0.1:5678/api/settings');
+      if (res.ok) {
+        const cfg = await res.json();
+        if (cfg) {
+          if (cfg.gemini_api_key || cfg.geminiApiKey) {
+            set({ geminiApiKey: cfg.gemini_api_key || cfg.geminiApiKey });
+          }
+          if (cfg.groq_api_key || cfg.groqApiKey) {
+            set({ groqApiKey: cfg.groq_api_key || cfg.groqApiKey });
+          }
+          if (cfg.output_dir || cfg.outputDir) {
+            set({ outputDir: cfg.output_dir || cfg.outputDir });
+          }
+          if (cfg.old_sub_blur_box || cfg.oldSubBlurBox) {
+            set({ oldSubBlurBox: cfg.old_sub_blur_box || cfg.oldSubBlurBox });
+          }
+          if (cfg.new_sub_box || cfg.newSubBox) {
+            set({ newSubBox: cfg.new_sub_box || cfg.newSubBox });
+          }
+        }
+      }
+    } catch {
+      // ignore
     }
 
     // 2. Load tasks from backend
