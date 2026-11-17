@@ -1,0 +1,85 @@
+================================================================================
+          HUONG DAN SU DUNG CHI TIET - AUTOMATION STUDIO MMO PRO
+    Phan Mem Tu Dong Hoa San Xuat Video, Reup Lach Ban Quyen, Dich Sub & Long Tieng AI
+================================================================================
+
+1. KHOI DONG PHAN MEM LAN DAU:
+--------------------------------------------------------------------------------
+- Yeu cau: Windows 10 hoac 11 (64-bit), da cai san Python 3.10+ (nho tich Add Python to PATH).
+- Buoc 1 (Chi chay 1 lan khi moi giai nen):
+  Nhay dup vao file "1_Cai_Dat_Moi_Truong.bat" de tu dong cai dat thu vien am thanh.
+- Buoc 2 (Mo ung dung):
+  Nhay dup vao file "Chay_App_Desktop.bat" de mo cua so phan mem Desktop doc lap.
+
+
+2. CAU HINH BAN DAU BAT BUOC:
+--------------------------------------------------------------------------------
+A. API Key Dich Thuat & Whisper:
+   - Bam vao nut "Cau Hinh API Dich" tren thanh cong cu dau trang.
+   - Dan Gemini API Key (lay mien phi tai https://aistudio.google.com/).
+   - Bam "Kiem Tra Key" -> Bao xanh thanh cong thi bam "Luu Cau Hinh".
+
+B. Thu Muc Xuat Video:
+   - Thu muc mac dinh la C:\Output.
+   - Co the sua thanh D:\VideoXuat hoac E:\ThanhPham tai muc "Cai Dat Xu Ly Hang Loat".
+
+
+3. HUONG DAN CHI TIET TUNG MENU & TINH NANG:
+--------------------------------------------------------------------------------
+
+LUONG 1: TU DONG HOA REUP TOAN DIEN (Tab: PRO AUTOMATION)
+- Buoc 1: Bam "+ Them Link / Video" de nhap link Douyin/TikTok/YouTube hoac chon file video co san tren may.
+- Buoc 2: Tren man hinh xem truoc video ben phai:
+  + Khung xanh [SUB CU (BLUR)]: Keo de len vi tri phu de tieng Trung de lam mo chu cu. Co the bam nut "Tu dong do vi tri Sub cu (Auto OCR)" de AI tu tim vi tri.
+  + Khung cam [KHUNG SUB (GLOBAL)]: Keo toi noi muon hien chu tieng Viet moi.
+- Buoc 3: Chon Render Engine: FFmpeg Sieu Toc, chon giong doc (Co Gai Hoat Ngon, Nam Mien Bac...), toc do doc (1.1x).
+- Buoc 4: Bam nut xanh la "AUTO - TU DONG CHAY" va theo doi tien do tai bang Live Log.
+
+LUONG 2: BO LOC LACH BAN QUYEN DA TANG (Tab: REUP STUDIO)
+- Bam tab "REUP STUDIO" tren thanh dieu huong.
+- Bat cac tinh nang:
+  + Lat Guong Video (Horizontal Flip).
+  + Zoom Cat Vien: 104% hoac 106% (cat bo 2-4% vien goc).
+  + Tang do tuong phan (1.05), do bao hoa mau (1.10).
+  + Nhieu Hat Vi Mo: 2% (chong thuat toan quet Hash video).
+  + Xoa Sach Metadata & Thay doi Hash file (MD5/SHA256).
+- Bam "AP DUNG CHO HANG DOI".
+
+LUONG 3: SAN XUAT TRUYEN AUDIO & PODCAST (Tab: TU DONG HOA TRUYEN AUDIO)
+- Bam nut "TU DONG HOA TRUYEN AUDIO" o goc tren ben trai.
+- Dan noi dung chuong truyen vao khung hoac bam "Nap File .TXT".
+- Chon giong doc truyen (Nam Mien Bac Tram Am), toc do 1.1x, am luong nhac nen 12%.
+- Bam "Tao Video Truyen Audio Ngay" -> Video se duoc tu dong tao voi tieu de vang 1080p sang trong.
+
+LUONG 4: BIEN TAP PHU DE & NGHE THU TUNG CAU (Tab: VOICE STUDIO)
+- Chon video trong danh sach tha xuong.
+- Bam nut LOA mau xanh tai bat ky cau nao de nghe phat giong doc that ra loa may tinh.
+- Nhap truc tiep vao o tieng Viet de sua noi dung theo y muon.
+- Co the chon giong doc khac nhau cho tung cau (Multi-Speaker).
+- Bam "Luu Phu De" de cap nhat, hoac "Ghep File Audio .MP3" de xuat am thanh.
+
+LUONG 5: QUAN LY DA KENH (Tab: QUAN LY KENH)
+- Bam tab "QUAN LY KENH" -> "+ Them Kenh Moi".
+- Dat ten kenh, chon nen tang (TikTok, YouTube, Facebook) va gan Profile rieng.
+- Moi kenh se co thu muc luu video doc lap va nut "Mo Thu Muc" tien loi.
+
+
+4. DONG GOI VA GUI CHO NGUOI KHAC CO CAI MAT KHAU:
+--------------------------------------------------------------------------------
+- Nhay dup vao file: "Tao_File_Nen_Co_Mat_Khau.bat"
+- Nhap mat khau muon dat (Vi du: 123456) roi nhan Enter.
+- File nen ma hoa AES-256 se duoc tu dong tao ra (sieu nhe vai tram KB).
+- Gui file do cho nguoi khac, ho phai co dung mat khau moi giai nen duoc.
+
+
+5. XU LY NHANH CAC LOI THUONG GAP:
+--------------------------------------------------------------------------------
+1. Bao loi "Chua cau hinh Gemini API Key":
+   -> Bam "Cau Hinh API Dich" o tren cung, dan key that roi bam Luu.
+2. O C:\ bi day dung luong:
+   -> Sua thu muc xuat sang o D:\Output hoac E:\Output tai bang Cai Dat.
+3. Bam nut Loa khong thay keu:
+   -> Kiem tra xem cau do da co chu tieng Viet chua, neu chua hay go noi dung vao.
+4. May khac mo app bi bao khong tim thay Python:
+   -> Cai dat Python tu https://python.org va nho tich vao o "Add Python to PATH".
+================================================================================
