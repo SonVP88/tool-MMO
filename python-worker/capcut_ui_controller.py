@@ -371,6 +371,20 @@ def open_draft_and_export(
                     if progress_callback:
                         progress_callback(95, "Đang Render", "CapCut đang render video theo timeline...")
 
+                time.sleep(2)
+                # Check if CapCut blocked export with a Pro / VIP upgrade paywall dialog
+                for pw_name in ["Pro", "VIP", "Tham gia Pro", "Join Pro"]:
+                    pw = auto.WindowControl(searchDepth=4, SubName=pw_name)
+                    if pw.Exists(maxSearchSeconds=0.5):
+                        if progress_callback:
+                            progress_callback(94, "CapCut Cảnh Báo", "CapCut yêu cầu trả phí PRO! Đang đóng bảng và dùng giải pháp Free...")
+                        for close_hint in ["Cancel", "Hủy", "Close", "Đóng", "X"]:
+                            btn_c = pw.ButtonControl(SubName=close_hint)
+                            if btn_c.Exists(maxSearchSeconds=0.5):
+                                btn_c.Click()
+                                break
+                        break
+
                 # Wait for render completion
                 for pct in range(95, 99):
                     time.sleep(1)

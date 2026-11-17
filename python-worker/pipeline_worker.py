@@ -883,9 +883,13 @@ def main():
             tts_segments = []
             voice_wav = None
 
-            if ai_engine_mode in ["HYBRID_PRO", "CLOUD_LOCAL"] or "tự động hóa capcut" in render_engine.lower():
-                # Extract audio & translate via Gemini for maximum accuracy
-                emit_progress(task_id, 35, "BƯỚC 3: Dịch Ngữ Cảnh", "[CapCut Auto] Tách âm thanh & Dịch ngữ cảnh chuẩn văn phong bằng Gemini...")
+            account_type = settings.get("capcutAccountType", "PRO")
+            is_free_account = (account_type.upper() == "FREE")
+
+            if is_free_account or ai_engine_mode in ["HYBRID_PRO", "CLOUD_LOCAL"] or "tự động hóa capcut" in render_engine.lower():
+                # For FREE CapCut accounts: we pre-generate Subtitles & Voice via AI (Gemini + Edge-TTS)
+                # and inject directly into Timeline so CapCut PC exports freely without hitting the PRO Paywall!
+                emit_progress(task_id, 35, "BƯỚC 3: Dịch Ngữ Cảnh", "[CapCut Free Safe] Bóc tách & Dịch ngữ cảnh chuẩn văn phong bằng Gemini...")
                 subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key, gemini_key)
                 genre = settings.get("genre", "Tự động")
                 quality = settings.get("translationQuality", "Tự nhiên / văn nói")
