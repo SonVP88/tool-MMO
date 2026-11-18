@@ -404,6 +404,47 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                 shutil.copyfileobj(f, self.wfile, length=65536)
             return
 
+        # Serve static UI files from dist (Production Single Port Mode)
+        dist_dir = BASE_DIR / "dist"
+        if dist_dir.exists() and not path.startswith("/api/"):
+            clean_rel = path.lstrip("/")
+            target_file = (dist_dir / clean_rel) if clean_rel else (dist_dir / "index.html")
+            if not target_file.exists() or target_file.is_dir():
+                target_file = dist_dir / "index.html"
+
+            if target_file.exists() and target_file.is_file():
+                ext = target_file.suffix.lower()
+                mime_map = {
+                    ".html": "text/html; charset=utf-8",
+                    ".js": "application/javascript; charset=utf-8",
+                    ".mjs": "application/javascript; charset=utf-8",
+                    ".css": "text/css; charset=utf-8",
+                    ".json": "application/json; charset=utf-8",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".gif": "image/gif",
+                    ".svg": "image/svg+xml",
+                    ".ico": "image/x-icon",
+                    ".woff": "font/woff",
+                    ".woff2": "font/woff2",
+                    ".ttf": "font/ttf",
+                    ".map": "application/json",
+                }
+                c_type = mime_map.get(ext, "application/octet-stream")
+                try:
+                    with open(target_file, "rb") as f:
+                        file_data = f.read()
+                    self.send_response(200)
+                    self.send_header('Content-Type', c_type)
+                    self.send_header('Content-Length', str(len(file_data)))
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(file_data)
+                    return
+                except Exception:
+                    pass
+
         self.send_json({"status": "not_found"}, 404)
 
     def do_POST(self):

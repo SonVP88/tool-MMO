@@ -27,14 +27,14 @@ def ensure_bridge_server():
             cwd=str(BASE_DIR),
             creationflags=creation_flags
         )
-        for _ in range(10):
+        for _ in range(20):
             time.sleep(0.5)
             if is_server_alive("http://127.0.0.1:5678/api/tasks"):
                 break
 
 def start_dist_server(dist_path, port=5173):
     handler = partial(http.server.SimpleHTTPRequestHandler, directory=str(dist_path))
-    httpd = http.server.ThreadingHTTPServer(('127.0.0.1', port), handler)
+    httpd = http.server.ThreadingHTTPServer(('0.0.0.0', port), handler)
     httpd.serve_forever()
 
 def ensure_frontend_server():
@@ -53,21 +53,26 @@ def ensure_frontend_server():
     print("[*] Đang khởi động giao diện Vite Dev Server...")
     creation_flags = 0x08000000 if sys.platform == "win32" else 0
     subprocess.Popen(
-        ["npx", "vite", "--host", "127.0.0.1", "--port", "5173"],
+        ["npx", "vite", "--host", "0.0.0.0", "--port", "5173"],
         shell=True,
         cwd=str(BASE_DIR),
         creationflags=creation_flags
     )
-    for _ in range(15):
+    for _ in range(20):
         time.sleep(0.5)
         if is_server_alive("http://127.0.0.1:5173"):
             break
 
 def launch_native_window():
     ensure_bridge_server()
-    ensure_frontend_server()
 
-    app_url = "http://127.0.0.1:5173"
+    # Priority: Bridge server on port 5678 serves both static UI (dist) and API!
+    if is_server_alive("http://127.0.0.1:5678"):
+        app_url = "http://127.0.0.1:5678"
+    else:
+        ensure_frontend_server()
+        app_url = "http://127.0.0.1:5173"
+
     app_title = "AUTOMATION STUDIO - TỰ ĐỘNG HÓA SẢN XUẤT HÀNG LOẠT"
 
     # Try pywebview (Native Windows WebView2 window)
