@@ -147,8 +147,7 @@ def trigger_capcut_auto_captions(progress_callback=None) -> bool:
         progress_callback(35, "CapCut Auto Sub", "[CapCut Pro] Mở tab Văn bản -> Phụ đề tự động...")
 
     if not auto:
-        time.sleep(2)
-        return True
+        raise RuntimeError("Thư viện Windows UIAutomation không khả dụng trên hệ thống để điều khiển CapCut!")
 
     win = find_capcut_main_window()
     if not win:
@@ -203,8 +202,7 @@ def trigger_capcut_bilingual_translate(progress_callback=None) -> bool:
         progress_callback(62, "CapCut Dịch VIP", "[CapCut Pro] Kích hoạt tính năng Dịch phụ đề song ngữ sang Tiếng Việt...")
 
     if not auto:
-        time.sleep(2)
-        return True
+        raise RuntimeError("Thư viện Windows UIAutomation không khả dụng trên hệ thống để điều khiển CapCut!")
 
     win = find_capcut_main_window()
     if not win:
@@ -248,8 +246,7 @@ def trigger_capcut_text_to_speech(voice_name="Cô Gái Hoạt Ngôn", sync_speed
         progress_callback(72, "CapCut TTS VIP", f"[CapCut Pro] Chọn giọng đọc VIP: {voice_name}...")
 
     if not auto:
-        time.sleep(2)
-        return True
+        raise RuntimeError("Thư viện Windows UIAutomation không khả dụng trên hệ thống để điều khiển CapCut!")
 
     win = find_capcut_main_window()
     if not win:
@@ -333,11 +330,7 @@ def open_draft_and_export(
     time.sleep(2)
 
     if not auto:
-        if progress_callback:
-            progress_callback(92, "Xuất CapCut", "Gửi lệnh Export tới CapCut...")
-            time.sleep(2)
-            progress_callback(98, "Xuất CapCut", "Đang hoàn tất lưu file MP4...")
-        return True
+        raise RuntimeError("Thư viện Windows UIAutomation không khả dụng để gửi phím tắt xuất video tới CapCut!")
 
     try:
         main_win = find_capcut_main_window()

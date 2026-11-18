@@ -415,7 +415,7 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
     )
 
 # ==================== STEP 3: GEMINI TRANSLATION ====================
-def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: str, gemini_key: str = None) -> list:
+def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: str, gemini_key: str = None, characters: list = None) -> list:
     if not subtitles:
         emit_progress(task_id, 50, "Dịch AI", "Không có câu thoại nào trong video cần dịch.")
         return []
@@ -426,6 +426,12 @@ def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: 
         )
 
     import requests, math
+
+    char_rules = ""
+    if characters and isinstance(characters, list) and len(characters) > 0:
+        valid_chars = [f"- '{c.get('originalName', '')}' dịch thành '{c.get('translatedName', '')}' (xưng hô: {c.get('pronoun', 'mặc định')})" for c in characters if isinstance(c, dict) and c.get('originalName')]
+        if valid_chars:
+            char_rules = "BẮT BUỘC tuân thủ từ điển nhân vật sau:\n" + "\n".join(valid_chars) + "\n\n"
 
     BATCH_SIZE = 50
     total_batches = int(math.ceil(len(subtitles) / BATCH_SIZE))
@@ -439,6 +445,7 @@ def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: 
         lines_prompt = "\n".join([f"[{s['index']}] {s['text']}" for s in batch])
         prompt = (
             f"Bạn là chuyên gia dịch thuật video thể loại {genre} ({quality}).\n"
+            f"{char_rules}"
             f"Hãy dịch các câu thoại sau sang tiếng Việt tự nhiên, giữ nguyên cấu trúc [index] và nghĩa gốc:\n"
             f"{lines_prompt}\n"
             f"Chỉ trả về các dòng dạng: [index] Bản dịch tiếng Việt"
@@ -975,6 +982,7 @@ def main():
     gemini_key = config.get("geminiApiKey", config.get("gemini_api_key", settings.get("geminiApiKey", settings.get("gemini_api_key", ""))))
     groq_key = config.get("groqApiKey", config.get("groq_api_key", settings.get("groqApiKey", settings.get("groq_api_key", ""))))
     cookie_data = config.get("douyinCookie", config.get("douyin_cookie", settings.get("douyinCookie", settings.get("douyin_cookie", ""))))
+    characters = config.get("characters", settings.get("characters", []))
 
     # Always fallback to disk config/settings.json if keys missing
     settings_file = BASE_DIR / "config" / "settings.json"
@@ -1047,7 +1055,7 @@ def main():
                 subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key, gemini_key)
                 genre = settings.get("genre", "Tự động")
                 quality = settings.get("translationQuality", "Tự nhiên / văn nói")
-                subtitles_trans = step_gemini_translation(task_id, subtitles, genre, quality, gemini_key)
+                subtitles_trans = step_gemini_translation(task_id, subtitles, genre, quality, gemini_key, characters=characters)
 
                 # Generate TTS for timeline
                 voice_name = settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)")
@@ -1104,7 +1112,7 @@ def main():
                 emit_progress(task_id, 92, "Hoàn thiện Render", "Tối ưu hóa file xuất thành phẩm bằng FFmpeg siêu tốc...")
                 if not subtitles_trans:
                     subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key, gemini_key)
-                    subtitles_trans = step_gemini_translation(task_id, subtitles, settings.get("genre", "Tự động"), settings.get("translationQuality", "Tự nhiên / văn nói"), gemini_key)
+                    subtitles_trans = step_gemini_translation(task_id, subtitles, settings.get("genre", "Tự động"), settings.get("translationQuality", "Tự nhiên / văn nói"), gemini_key, characters=characters)
                     voice_wav = step_tts_synthesis(task_id, subtitles_trans, temp_dir, settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)"), float(settings.get("speed", 1.0)))
                 final_mp4 = step_render_video(
                     task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
@@ -1121,7 +1129,7 @@ def main():
         # Step 3: Contextual Translation
         genre = settings.get("genre", "Tự động")
         quality = settings.get("translationQuality", "Tự nhiên / văn nói")
-        subtitles_trans = step_gemini_translation(task_id, subtitles, genre, quality, gemini_key)
+        subtitles_trans = step_gemini_translation(task_id, subtitles, genre, quality, gemini_key, characters=characters)
 
         # Step 4: TTS Voice
         voice_name = settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)")

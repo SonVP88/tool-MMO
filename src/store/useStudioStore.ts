@@ -599,6 +599,11 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setCharacters: (chars) => {
     try {
       localStorage.setItem('studio_characters', JSON.stringify(chars));
+      fetch('http://127.0.0.1:5678/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characters: chars }),
+      }).catch(() => {});
     } catch {}
     set({ characters: chars });
   },

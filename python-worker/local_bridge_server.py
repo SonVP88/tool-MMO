@@ -362,13 +362,22 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                 self.send_json({"status": "error", "message": "Missing task_id"}, 400)
                 return
 
-            srt_file = BASE_DIR / "python-worker" / "temp" / f"task_{t_id}" / f"subtitles_{t_id}.srt"
-            if not srt_file.exists():
-                found = list((BASE_DIR / "python-worker" / "temp").glob(f"**/subtitles_{t_id}.srt"))
+            candidates = [
+                BASE_DIR / "temp" / f"task_{t_id}" / f"subtitles_{t_id}.srt",
+                BASE_DIR / "python-worker" / "temp" / f"task_{t_id}" / f"subtitles_{t_id}.srt",
+                Path.cwd() / "temp" / f"task_{t_id}" / f"subtitles_{t_id}.srt",
+            ]
+            srt_file = None
+            for c in candidates:
+                if c.exists():
+                    srt_file = c
+                    break
+            if not srt_file:
+                found = list(BASE_DIR.glob(f"**/task_{t_id}/subtitles_{t_id}.srt"))
                 if found:
                     srt_file = found[0]
 
-            if srt_file.exists():
+            if srt_file and srt_file.exists():
                 subs = parse_srt_to_list(srt_file)
                 self.send_json({"status": "success", "subtitles": subs})
             else:
