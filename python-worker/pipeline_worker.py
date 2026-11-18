@@ -1007,20 +1007,26 @@ def main():
         # Step 1: Input / Download
         video_raw = step_download_or_copy(task_id, source, temp_dir, cookie_data)
 
-        # Check AI Engine Mode: Native CapCut Pro vs Hybrid Pro vs Cloud Local
-        ai_engine_mode = settings.get("aiEngineMode", "CAPCUT_PRO_NATIVE")
+        # Check AI Engine Mode & Render Engine
+        ai_engine_mode = settings.get("aiEngineMode", "CLOUD_LOCAL")
         render_engine = settings.get("renderEngine", "FFmpeg Siêu Tốc (Chạy ngầm 100%)")
         custom_draft_dir = config.get("capcutDraftDir", "")
         custom_capcut_exe = config.get("capcutExePath", "")
 
+        is_ffmpeg_direct = ("ffmpeg" in render_engine.lower())
         is_capcut_draft_only = ("nháp" in render_engine.lower() or "draft" in render_engine.lower())
-        is_capcut_auto = (
-            ai_engine_mode in ["CAPCUT_PRO_NATIVE", "HYBRID_PRO"] or
-            "capcut" in render_engine.lower() or
-            "tự động hóa capcut" in render_engine.lower()
-        ) and not is_capcut_draft_only
+        is_capcut_auto = ("tự động hóa capcut" in render_engine.lower() or ("capcut" in render_engine.lower() and not is_capcut_draft_only and not is_ffmpeg_direct))
 
         if is_capcut_auto:
+            from capcut_ui_controller import find_capcut_main_window, get_capcut_exe_path
+            win = find_capcut_main_window()
+            exe = get_capcut_exe_path(custom_capcut_exe)
+            if not win and not os.path.isfile(exe):
+                raise RuntimeError(
+                    "Máy tính của bạn chưa cài đặt phần mềm CapCut PC! "
+                    "Vui lòng chọn Chế độ xuất là '⚡ FFmpeg Siêu Tốc (Chạy ngầm 100%)' để tạo video trực tiếp không cần cài CapCut."
+                )
+
             emit_progress(task_id, 20, "CapCut Auto Pipeline", f"Khởi động mô hình Tự Động Hóa CapCut Pro 5 Bước ({ai_engine_mode})...")
             from capcut_draft_generator import create_capcut_draft
             from capcut_ui_controller import run_native_capcut_pro_pipeline, open_draft_and_export

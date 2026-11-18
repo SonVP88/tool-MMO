@@ -68,7 +68,16 @@ export const BatchSettingsForm: React.FC = () => {
         <div className="relative">
           <select
             value={settings.renderEngine || 'FFmpeg Siêu Tốc (Chạy ngầm 100%)'}
-            onChange={(e) => updateSettings({ renderEngine: e.target.value })}
+            onChange={(e) => {
+              const val = e.target.value;
+              const updates: any = { renderEngine: val };
+              if (val.includes('FFmpeg')) {
+                updates.aiEngineMode = 'CLOUD_LOCAL';
+              } else if (val.includes('Tự Động Hóa CapCut')) {
+                updates.aiEngineMode = 'CAPCUT_PRO_NATIVE';
+              }
+              updateSettings(updates);
+            }}
             className="w-full bg-[#151d2a] border border-[#2e405a] rounded-md px-2.5 py-1.5 text-xs text-emerald-300 font-semibold focus:outline-none focus:border-emerald-500 appearance-none cursor-pointer"
           >
             <option value="FFmpeg Siêu Tốc (Chạy ngầm 100%)">
