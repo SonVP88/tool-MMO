@@ -181,11 +181,17 @@ def trigger_capcut_auto_captions(progress_callback=None) -> bool:
             if progress_callback:
                 progress_callback(45, "CapCut Auto Sub", "[CapCut Pro] Đang nhận diện phụ đề từ video...")
             
-            # Wait for recognition progress to finish (typically 3-8s)
-            for p in range(48, 60):
+            # Wait for recognition progress to finish
+            for p in range(30):
                 time.sleep(1)
+                # Check if recognition finished (no Recognizing overlay or progress text)
+                has_recognizing = win.Control(searchDepth=8, SubName="Recognizing").Exists(maxSearchSeconds=0.2) or \
+                                  win.Control(searchDepth=8, SubName="Đang nhận dạng").Exists(maxSearchSeconds=0.2)
+                if not has_recognizing and p >= 2:
+                    break
                 if progress_callback:
-                    progress_callback(p, "CapCut Auto Sub", f"[CapCut Pro] Tiến trình tạo Sub: {p}%...")
+                    pct = min(58, 48 + p)
+                    progress_callback(pct, "CapCut Auto Sub", f"[CapCut Pro] Đang nhận diện phụ đề: {pct}%...")
             return True
 
     except Exception as e:
@@ -292,11 +298,16 @@ def trigger_capcut_text_to_speech(voice_name="Cô Gái Hoạt Ngôn", sync_speed
             if progress_callback:
                 progress_callback(78, "CapCut TTS VIP", f"[CapCut Pro] Đang tổng hợp giọng {voice_name}...")
 
-            # Wait for TTS synthesis
-            for p in range(80, 88):
+            # Wait for TTS synthesis to finish
+            for p in range(30):
                 time.sleep(1)
+                has_generating = win.Control(searchDepth=8, SubName="Generating").Exists(maxSearchSeconds=0.2) or \
+                                 win.Control(searchDepth=8, SubName="Đang tạo").Exists(maxSearchSeconds=0.2)
+                if not has_generating and p >= 2:
+                    break
                 if progress_callback:
-                    progress_callback(p, "CapCut TTS VIP", f"[CapCut Pro] Sinh giọng đọc: {p}%...")
+                    pct = min(88, 80 + p)
+                    progress_callback(pct, "CapCut TTS VIP", f"[CapCut Pro] Đang đọc lồng tiếng: {pct}%...")
 
         return True
 
@@ -378,13 +389,37 @@ def open_draft_and_export(
                                 break
                         break
 
-                # Wait for render completion
-                for pct in range(95, 99):
-                    time.sleep(1)
-                    if progress_callback:
-                        progress_callback(pct, "Đang Render", f"Tiến độ render CapCut: {pct}%...")
+                # Actively wait for CapCut render completion
+                start_render_time = time.time()
+                is_finished = False
+                target_video = Path(output_dir) / f"{output_filename}.mp4"
 
-                time.sleep(2)
+                for step in range(150): # Polling up to 5 minutes
+                    time.sleep(2)
+                    elapsed = int(time.time() - start_render_time)
+
+                    # Check for completion buttons in export window
+                    for done_label in ["Open folder", "Mở thư mục", "OK", "Đóng", "Complete", "Hoàn thành"]:
+                        done_btn = export_win.ButtonControl(SubName=done_label)
+                        if done_btn.Exists(maxSearchSeconds=0.3):
+                            is_finished = True
+                            if progress_callback:
+                                progress_callback(99, "Đang Render", f"CapCut render hoàn tất trong {elapsed}s.")
+                            break
+                    if is_finished:
+                        break
+
+                    # Check if output file is created and stable
+                    if target_video.exists() and target_video.stat().st_size > 1024 * 1024:
+                        if not export_win.Exists(maxSearchSeconds=0.5):
+                            is_finished = True
+                            break
+
+                    if progress_callback and step % 3 == 0:
+                        pct_display = min(98, 95 + int((step / 60) * 3))
+                        progress_callback(pct_display, "Đang Render", f"CapCut đang render video ({elapsed}s)...")
+
+                time.sleep(1)
                 # Close export dialog if still open
                 close_btn = export_win.ButtonControl(SubName="Close")
                 if not close_btn.Exists(maxSearchSeconds=1):
@@ -453,15 +488,13 @@ def run_native_capcut_pro_pipeline(
             trigger_capcut_auto_captions(osd_progress)
             trigger_capcut_bilingual_translate(osd_progress)
         else:
-            osd_progress(50, "Căn Chỉnh Sub", f"[{mode_label}] Nạp sub Tiếng Việt chuẩn ngữ cảnh và căn chỉnh vị trí hiển thị...")
-            time.sleep(1.5)
+            osd_progress(50, "Căn Chỉnh Sub", f"[{mode_label}] Phụ đề Tiếng Việt đã được tích hợp chuẩn xác vào timeline của dự án.")
 
         # 2. Text to Speech Dubbing
         if is_pro and ai_engine_mode == "CAPCUT_PRO_NATIVE":
             trigger_capcut_text_to_speech(voice_name=vip_voice, sync_speed=sync_speed, progress_callback=osd_progress)
         else:
-            osd_progress(75, "Lồng Tiếng Khớp Âm", f"[{mode_label}] Đồng bộ thời lượng câu thoại và giọng đọc lồng tiếng ăn khớp 100% với phụ đề...")
-            time.sleep(1.5)
+            osd_progress(75, "Lồng Tiếng Khớp Âm", f"[{mode_label}] Track âm thanh lồng tiếng đã được đồng bộ vào timeline của dự án.")
 
         # 3. Export Video via UI
         open_draft_and_export(
