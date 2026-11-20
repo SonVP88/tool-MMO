@@ -406,44 +406,71 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
 
         # Serve static UI files from dist (Production Single Port Mode)
         dist_dir = BASE_DIR / "dist"
-        if dist_dir.exists() and not path.startswith("/api/"):
-            clean_rel = path.lstrip("/")
-            target_file = (dist_dir / clean_rel) if clean_rel else (dist_dir / "index.html")
-            if not target_file.exists() or target_file.is_dir():
-                target_file = dist_dir / "index.html"
+        if not path.startswith("/api/"):
+            if dist_dir.exists():
+                clean_rel = path.lstrip("/")
+                target_file = (dist_dir / clean_rel) if clean_rel else (dist_dir / "index.html")
+                if not target_file.exists() or target_file.is_dir():
+                    target_file = dist_dir / "index.html"
 
-            if target_file.exists() and target_file.is_file():
-                ext = target_file.suffix.lower()
-                mime_map = {
-                    ".html": "text/html; charset=utf-8",
-                    ".js": "application/javascript; charset=utf-8",
-                    ".mjs": "application/javascript; charset=utf-8",
-                    ".css": "text/css; charset=utf-8",
-                    ".json": "application/json; charset=utf-8",
-                    ".png": "image/png",
-                    ".jpg": "image/jpeg",
-                    ".jpeg": "image/jpeg",
-                    ".gif": "image/gif",
-                    ".svg": "image/svg+xml",
-                    ".ico": "image/x-icon",
-                    ".woff": "font/woff",
-                    ".woff2": "font/woff2",
-                    ".ttf": "font/ttf",
-                    ".map": "application/json",
-                }
-                c_type = mime_map.get(ext, "application/octet-stream")
-                try:
-                    with open(target_file, "rb") as f:
-                        file_data = f.read()
-                    self.send_response(200)
-                    self.send_header('Content-Type', c_type)
-                    self.send_header('Content-Length', str(len(file_data)))
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(file_data)
-                    return
-                except Exception:
-                    pass
+                if target_file.exists() and target_file.is_file():
+                    ext = target_file.suffix.lower()
+                    mime_map = {
+                        ".html": "text/html; charset=utf-8",
+                        ".js": "application/javascript; charset=utf-8",
+                        ".mjs": "application/javascript; charset=utf-8",
+                        ".css": "text/css; charset=utf-8",
+                        ".json": "application/json; charset=utf-8",
+                        ".png": "image/png",
+                        ".jpg": "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                        ".gif": "image/gif",
+                        ".svg": "image/svg+xml",
+                        ".ico": "image/x-icon",
+                        ".woff": "font/woff",
+                        ".woff2": "font/woff2",
+                        ".ttf": "font/ttf",
+                        ".map": "application/json",
+                    }
+                    c_type = mime_map.get(ext, "application/octet-stream")
+                    try:
+                        with open(target_file, "rb") as f:
+                            file_data = f.read()
+                        self.send_response(200)
+                        self.send_header('Content-Type', c_type)
+                        self.send_header('Content-Length', str(len(file_data)))
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(file_data)
+                        return
+                    except Exception:
+                        pass
+            else:
+                # Dist folder missing fallback
+                msg = """<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="utf-8"><title>Automation Studio - Khởi Động</title>
+<style>
+body{background:#0b1120;color:#f8fafc;font-family:Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.box{background:#151c27;border:1px solid #233145;padding:36px;border-radius:18px;max-width:540px;text-align:center;box-shadow:0 20px 40px rgba(0,0,0,0.5);}
+h2{color:#38bdf8;margin:0 0 16px 0;}
+p{color:#94a3b8;font-size:14px;line-height:1.6;}
+code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-family:Consolas,monospace;}
+</style></head>
+<body>
+<div class="box">
+  <h2>⚡ AUTOMATION STUDIO MMO PRO</h2>
+  <p>Máy chủ Backend đang hoạt động ổn định tại cổng 5678.</p>
+  <p>Thư mục giao diện <code>dist/</code> chưa được tạo. Vui lòng chạy file <code>CAI_DAT_MAY_MOI.bat</code> để hoàn tất cài đặt hoặc biên dịch giao diện.</p>
+</div>
+</body></html>""".encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(msg)))
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(msg)
+                return
 
         self.send_json({"status": "not_found"}, 404)
 
