@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Play, 
   Pause, 
@@ -12,9 +12,13 @@ import {
   Trash2,
   CheckCircle,
   RefreshCcw,
-  Sparkles
+  Sparkles,
+  Crown,
+  ShieldCheck,
+  MonitorPlay
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
+import { apiGetCapcutStatus, type CapcutStatus } from '../services/tauriBridge';
 
 export const ControlPanel: React.FC = () => {
   const {
@@ -36,7 +40,42 @@ export const ControlPanel: React.FC = () => {
     addLog,
     openFolder,
     outputDir,
+    settings,
+    updateSettings,
   } = useStudioStore();
+
+  const [capcutStatus, setCapcutStatus] = useState<CapcutStatus | null>(null);
+  const [checkingCapcut, setCheckingCapcut] = useState(false);
+
+  const checkCapcut = async () => {
+    setCheckingCapcut(true);
+    const st = await apiGetCapcutStatus();
+    setCapcutStatus(st);
+    setCheckingCapcut(false);
+  };
+
+  useEffect(() => {
+    checkCapcut();
+  }, []);
+
+  const isProAccount = settings.capcutAccountType === 'PRO';
+
+  const handleSelectAccountTier = (tier: 'FREE' | 'PRO') => {
+    if (tier === 'PRO') {
+      updateSettings({
+        capcutAccountType: 'PRO',
+        aiEngineMode: settings.aiEngineMode === 'CLOUD_LOCAL' ? 'CAPCUT_PRO_NATIVE' : settings.aiEngineMode,
+        renderEngine: 'Tự Động Hóa CapCut Toàn Diện (Tự tạo Timeline + Tự mở CapCut bấm Xuất Video)',
+      });
+      addLog('👑 Đã chuyển sang luồng Tài Khoản CapCut PRO (VIP): Mở khóa Phụ đề Song ngữ, Giọng VIP AI & Xuất 4K.', 'success');
+    } else {
+      updateSettings({
+        capcutAccountType: 'FREE',
+        aiEngineMode: 'CLOUD_LOCAL',
+      });
+      addLog('🆓 Đã chuyển sang luồng Tài Khoản Thường (Free): Dùng AI ngoài (Whisper + Gemini + Edge-TTS), tránh 100% Paywall Pro.', 'info');
+    }
+  };
 
   const handleOpenExportFolder = () => {
     openFolder(outputDir);
@@ -86,6 +125,53 @@ export const ControlPanel: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* CapCut Account Tier Pre-Selector & Live CapCut Window Detector */}
+      <div className="bg-[#0e141e] border border-[#243247] rounded-lg p-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-bold text-slate-400 mr-1">Luồng Tài Khoản:</span>
+          <button
+            type="button"
+            onClick={() => handleSelectAccountTier('FREE')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              !isProAccount
+                ? 'bg-sky-600 text-white shadow-md ring-1 ring-sky-400/60'
+                : 'bg-[#17202e] text-slate-400 hover:text-slate-200 border border-[#26354a]'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Tài khoản Thường (Free)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectAccountTier('PRO')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              isProAccount
+                ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-white shadow-md ring-1 ring-amber-300/60'
+                : 'bg-[#17202e] text-slate-400 hover:text-slate-200 border border-[#26354a]'
+            }`}
+          >
+            <Crown className="w-3.5 h-3.5" />
+            Tài khoản Pro (VIP)
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={checkCapcut}
+          title="Nhấn để kiểm tra lại trạng thái cửa sổ CapCut PC đang mở trên máy"
+          className={`px-2.5 py-1 rounded-md text-[10px] font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+            capcutStatus?.is_running
+              ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900/60'
+              : 'bg-[#141c28] text-slate-400 border-[#253347] hover:text-slate-200'
+          }`}
+        >
+          <MonitorPlay className={`w-3.5 h-3.5 ${checkingCapcut ? 'animate-spin' : ''}`} />
+          {capcutStatus?.is_running
+            ? `🟢 CapCut đang mở (${capcutStatus.screen_state === 'EDITOR' ? 'Đang sửa dự án' : 'Trang chủ'})`
+            : '⚪ CapCut PC chưa mở (Tự mở khi chạy)'}
+        </button>
+      </div>
 
       {/* Row 1: Primary Action Buttons */}
       <div className="grid grid-cols-4 gap-2">

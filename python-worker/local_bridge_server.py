@@ -433,6 +433,26 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
             self.send_json(cfg)
             return
 
+        if path == "/api/capcut_status":
+            try:
+                worker_dir = str(BASE_DIR / "python-worker")
+                if worker_dir not in sys.path:
+                    sys.path.insert(0, worker_dir)
+                from capcut_ui_controller import get_capcut_status
+                custom_exe = ""
+                if SETTINGS_FILE.exists():
+                    try:
+                        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                            s = json.load(f)
+                            custom_exe = s.get("capcut_exe_path", s.get("capcutExePath", ""))
+                    except Exception:
+                        pass
+                status_info = get_capcut_status(custom_exe)
+                self.send_json(status_info)
+            except Exception as e:
+                self.send_json({"is_running": False, "screen_state": "CLOSED", "window_title": "", "exe_installed": False, "error": str(e)})
+            return
+
         if path == "/api/profiles":
             profiles = []
             if PROFILES_FILE.exists():

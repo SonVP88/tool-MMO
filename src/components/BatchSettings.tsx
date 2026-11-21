@@ -199,29 +199,35 @@ export const BatchSettingsForm: React.FC = () => {
         {settings.aiEngineMode !== 'CLOUD_LOCAL' && (
           <div className="bg-[#121926] p-2 rounded border border-purple-500/20 text-[10px] space-y-1.5">
             <div className="text-purple-300 font-bold flex items-center justify-between">
-              <span>🤖 Mô hình Luồng Auto CapCut Pro (5 Bước Khép Kín):</span>
-              <span className="text-emerald-400 text-[9px] bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-500/30">Tự động 100%</span>
+              <span>
+                {settings.capcutAccountType === 'FREE'
+                  ? '🆓 Luồng CapCut Thường (Free-Safe - Né Paywall 100%):'
+                  : '👑 Luồng CapCut Pro 2026 (Full Tính Năng VIP):'}
+              </span>
+              <span className="text-emerald-400 text-[9px] bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-500/30">
+                Tự động 100%
+              </span>
             </div>
             <div className="grid grid-cols-5 gap-1 text-center font-mono text-[9px]">
               <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
                 <span className="block font-bold text-amber-400">BƯỚC 1</span>
-                Nạp Video & Khung
+                Nạp Video & Tỷ Lệ
               </div>
               <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
                 <span className="block font-bold text-blue-400">BƯỚC 2</span>
-                Che Sub Cũ & Blur
+                {settings.capcutAccountType === 'FREE' ? 'Blur Free-Safe' : 'Blur Native Pro'}
               </div>
               <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
                 <span className="block font-bold text-purple-400">BƯỚC 3</span>
-                Auto Sub & Dịch
+                {settings.capcutAccountType === 'FREE' ? 'Sub Gemini Free' : 'Sub Song Ngữ Pro'}
               </div>
               <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
                 <span className="block font-bold text-emerald-400">BƯỚC 4</span>
-                Giọng VIP Khớp Âm
+                {settings.capcutAccountType === 'FREE' ? 'Edge-TTS Free' : 'Giọng VIP AI'}
               </div>
               <div className="bg-[#1a2332] p-1 rounded border border-[#27384e] text-slate-300">
                 <span className="block font-bold text-rose-400">BƯỚC 5</span>
-                Tự Xuất C:\Output
+                {settings.capcutAccountType === 'FREE' ? 'Xuất 1080p Mượt' : 'Xuất 4K/60fps'}
               </div>
             </div>
           </div>

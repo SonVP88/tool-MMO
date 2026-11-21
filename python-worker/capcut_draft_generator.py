@@ -41,6 +41,42 @@ def sec_to_us(seconds: float) -> int:
     """Convert seconds to CapCut microseconds (1s = 1,000,000 us)"""
     return int(round(seconds * 1_000_000))
 
+def probe_video_metadata(video_path: Path) -> tuple:
+    """Dynamically probes true (width, height, duration_sec) from video file using FFmpeg."""
+    import subprocess, re
+    width, height, duration = 1920, 1080, 10.0
+    try:
+        ffmpeg_exe = shutil.which("ffmpeg")
+        if not ffmpeg_exe:
+            local_bin = Path(__file__).resolve().parent.parent / "bin" / "ffmpeg.exe"
+            if local_bin.exists():
+                ffmpeg_exe = str(local_bin)
+        if not ffmpeg_exe:
+            try:
+                import imageio_ffmpeg
+                ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            except Exception:
+                ffmpeg_exe = "ffmpeg"
+        res = subprocess.run(
+            [ffmpeg_exe, "-i", str(video_path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="ignore",
+            creationflags=0x08000000 if sys.platform == "win32" else 0
+        )
+        out = res.stderr or ""
+        m_dim = re.search(r'Video:.*?,\s*(\d{2,5})x(\d{2,5})', out)
+        if m_dim:
+            width = int(m_dim.group(1))
+            height = int(m_dim.group(2))
+        m_dur = re.search(r'Duration:\s*(\d+):(\d+):([\d.]+)', out)
+        if m_dur:
+            duration = int(m_dur.group(1)) * 3600 + int(m_dur.group(2)) * 60 + float(m_dur.group(3))
+    except Exception:
+        pass
+    return width, height, max(1.0, duration)
+
 def create_capcut_draft(
     project_name: str,
     raw_video_path: Path,
@@ -48,15 +84,15 @@ def create_capcut_draft(
     settings: dict,
     old_sub_box: dict,
     new_sub_box: dict,
-    custom_draft_dir: str = None
+    custom_draft_dir: str = None,
+    account_type: str = "FREE"
 ) -> Path:
     """
-    Creates a complete CapCut PC project folder with 4 tracks:
-    1. Main Video Track (with original volume setting)
-    2. Blur / Mask Layer covering old sub box
-    3. TTS Audio Track (mapped to exact timestamps and voice volume)
-    4. New Subtitle Text Track (styled text with font size, color, stroke, position)
+    Creates a complete CapCut PC project folder compatible with CapCut PC 2025/2026:
+    - PRO Mode: Injects Video + Native Blur Effect + TTS Audio + Subtitles Text.
+    - FREE Mode: Injects 100% Paywall-Free tracks (Video + Local TTS Audio + Standard Free Text, NO Pro effects).
     """
+    is_pro = (str(account_type or "FREE").upper() == "PRO")
     base_draft_dir = get_capcut_draft_base_path(custom_draft_dir)
     project_folder_name = f"{project_name}_{int(time.time())}"
     project_dir = base_draft_dir / project_folder_name
@@ -65,19 +101,22 @@ def create_capcut_draft(
     project_id = generate_id()
     now_us = int(time.time() * 1_000_000)
 
-    # Estimate video duration from TTS or file
-    total_duration_sec = 10.0
+    # Probe true video resolution and duration dynamically
+    vid_w, vid_h, probed_dur = probe_video_metadata(raw_video_path)
+    total_duration_sec = probed_dur
     if tts_audio_segments:
-        total_duration_sec = max(10.0, max([seg.get('end', 0.0) for seg in tts_audio_segments]) + 1.0)
+        tts_max = max([float(seg.get('end', 0.0)) for seg in tts_audio_segments]) + 0.5
+        total_duration_sec = max(probed_dur, tts_max)
     total_duration_us = sec_to_us(total_duration_sec)
+    canvas_ratio = "9:16" if vid_h > vid_w else ("1:1" if vid_h == vid_w else "16:9")
 
-    orig_volume = float(settings.get("originalAudioVolume", 20)) / 100.0
-    if settings.get("audioFilterMode") == "mute_original":
+    orig_volume = float(settings.get("original_audio_volume", settings.get("originalAudioVolume", 20))) / 100.0
+    if settings.get("audio_filter_mode", settings.get("audioFilterMode")) == "mute_original":
         orig_volume = 0.0
-    voice_volume = float(settings.get("voiceVolume", 100)) / 100.0
-    font_size = float(settings.get("fontSize", 25))
-    text_color = settings.get("textColor", "#f59e0b")
-    stroke_color = settings.get("strokeColor", "#000000")
+    voice_volume = float(settings.get("voice_volume", settings.get("voiceVolume", 100))) / 100.0
+    font_size = float(settings.get("font_size", settings.get("fontSize", 25)))
+    text_color = settings.get("text_color", settings.get("textColor", "#f59e0b"))
+    stroke_color = settings.get("stroke_color", settings.get("strokeColor", "#000000"))
 
     # Materials container
     materials = {
@@ -107,8 +146,8 @@ def create_capcut_draft(
         "path": str(raw_video_path.resolve()),
         "material_name": raw_video_path.name,
         "duration": total_duration_us,
-        "width": 1280,
-        "height": 720,
+        "width": vid_w,
+        "height": vid_h,
         "type": "video",
         "category_id": "",
         "category_name": "local"
@@ -138,47 +177,48 @@ def create_capcut_draft(
     }
     tracks.append(track_video)
 
-    # ==================== 2. TRACK 2: BLUR OVERLAY (SUB CŨ) ====================
-    effect_mat_id = generate_id()
-    materials["effects"].append({
-        "id": effect_mat_id,
-        "name": "Làm mờ chuyển động (Box Blur)",
-        "effect_id": "blur_sub_cover",
-        "type": "blur",
-        "value": float(settings.get("blurRadius", 25)) / 50.0,
-        "apply_target_type": 0,
-        "adjust_params": [
-            {"default_value": 0.5, "name": "intensity", "value": 0.6}
-        ]
-    })
+    # ==================== 2. TRACK 2: BLUR OVERLAY (PRO ONLY - FREE PRE-APPLIES IN FFMPEG) ====================
+    if is_pro:
+        effect_mat_id = generate_id()
+        materials["effects"].append({
+            "id": effect_mat_id,
+            "name": "Làm mờ chuyển động (Box Blur)",
+            "effect_id": "blur_sub_cover",
+            "type": "blur",
+            "value": float(settings.get("blur_radius", settings.get("blurRadius", 25))) / 50.0,
+            "apply_target_type": 0,
+            "adjust_params": [
+                {"default_value": 0.5, "name": "intensity", "value": 0.6}
+            ]
+        })
 
-    # Normalized coordinates in CapCut range (-1.0 to 1.0)
-    bx_norm = (float(old_sub_box.get('x', 18)) / 50.0) - 1.0
-    by_norm = 1.0 - (float(old_sub_box.get('y', 72)) / 50.0)
+        # Normalized coordinates in CapCut range (-1.0 to 1.0)
+        bx_norm = (float(old_sub_box.get('x', 18)) / 50.0) - 1.0
+        by_norm = 1.0 - (float(old_sub_box.get('y', 72)) / 50.0)
 
-    track_effect = {
-        "id": generate_id(),
-        "type": "effect",
-        "attribute": 0,
-        "segments": [
-            {
-                "id": generate_id(),
-                "material_id": effect_mat_id,
-                "target_timerange": {
-                    "start": 0,
-                    "duration": total_duration_us
-                },
-                "render_index": 1000,
-                "clip": {
-                    "transform_x": bx_norm,
-                    "transform_y": by_norm,
-                    "scale_x": float(old_sub_box.get('width', 32)) / 100.0,
-                    "scale_y": float(old_sub_box.get('height', 9)) / 100.0,
+        track_effect = {
+            "id": generate_id(),
+            "type": "effect",
+            "attribute": 0,
+            "segments": [
+                {
+                    "id": generate_id(),
+                    "material_id": effect_mat_id,
+                    "target_timerange": {
+                        "start": 0,
+                        "duration": total_duration_us
+                    },
+                    "render_index": 1000,
+                    "clip": {
+                        "transform_x": bx_norm,
+                        "transform_y": by_norm,
+                        "scale_x": float(old_sub_box.get('width', 32)) / 100.0,
+                        "scale_y": float(old_sub_box.get('height', 9)) / 100.0,
+                    }
                 }
-            }
-        ]
-    }
-    tracks.append(track_effect)
+            ]
+        }
+        tracks.append(track_effect)
 
     # ==================== 3. TRACK 3: TTS VOICE AUDIOS ====================
     audio_segments = []
@@ -301,9 +341,9 @@ def create_capcut_draft(
         "fps": 30.0,
         "duration": total_duration_us,
         "canvas_config": {
-            "width": 1280,
-            "height": 720,
-            "ratio": "16:9"
+            "width": vid_w,
+            "height": vid_h,
+            "ratio": canvas_ratio
         },
         "materials": materials,
         "tracks": tracks,
@@ -328,8 +368,11 @@ def create_capcut_draft(
         "draft_timeline_materials_size_": len(materials["videos"]) + len(materials["audios"])
     }
 
-    # Save to disk
+    # Save to disk (both draft_content.json and draft_info.json for CapCut PC 2025/2026 compatibility)
     with open(project_dir / "draft_content.json", "w", encoding="utf-8") as f:
+        json.dump(draft_content, f, ensure_ascii=False, indent=2)
+
+    with open(project_dir / "draft_info.json", "w", encoding="utf-8") as f:
         json.dump(draft_content, f, ensure_ascii=False, indent=2)
 
     with open(project_dir / "draft_meta_info.json", "w", encoding="utf-8") as f:

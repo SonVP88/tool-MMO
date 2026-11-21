@@ -212,7 +212,8 @@ export async function apiSaveCurrentSettings(
     text_color: settings.textColor,
     stroke_color: settings.strokeColor,
     render_engine: settings.renderEngine || 'FFmpeg Siêu Tốc (Chạy ngầm 100%)',
-    ai_engine_mode: settings.aiEngineMode || 'CAPCUT_PRO_NATIVE',
+    ai_engine_mode: settings.aiEngineMode || 'CLOUD_LOCAL',
+    capcut_account_type: settings.capcutAccountType || 'FREE',
     capcut_vip_voice: settings.capcutVipVoice || 'Cô Gái Hoạt Ngôn',
     capcut_sync_speed: settings.capcutSyncSpeed !== false,
     capcut_draft_dir: settings.capcutDraftDir || '',
@@ -340,4 +341,30 @@ export async function apiSelectFolder(): Promise<string | null> {
     console.error('Failed to select folder:', err);
     return null;
   }
+}
+
+export interface CapcutStatus {
+  is_running: boolean;
+  screen_state: 'EDITOR' | 'HOME' | 'CLOSED';
+  window_title: string;
+  exe_installed: boolean;
+  exe_path: string;
+}
+
+export async function apiGetCapcutStatus(): Promise<CapcutStatus> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/capcut_status`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    // ignore
+  }
+  return {
+    is_running: false,
+    screen_state: 'CLOSED',
+    window_title: '',
+    exe_installed: false,
+    exe_path: '',
+  };
 }

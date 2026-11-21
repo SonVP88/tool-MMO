@@ -1202,84 +1202,85 @@ def main():
         video_raw, extracted_title = step_download_or_copy(task_id, source, temp_dir, cookie_data, preferred_name=initial_name)
         final_task_name = extracted_title or initial_name or str(task_id)
 
-        # Check AI Engine Mode & Render Engine
-        ai_engine_mode = settings.get("aiEngineMode", "CLOUD_LOCAL")
-        render_engine = settings.get("renderEngine", "FFmpeg Siêu Tốc (Chạy ngầm 100%)")
-        custom_draft_dir = config.get("capcutDraftDir", "")
-        custom_capcut_exe = config.get("capcutExePath", "")
+        # Check AI Engine Mode & Render Engine (supports both snake_case from settings.json and camelCase)
+        ai_engine_mode = settings.get("ai_engine_mode") or settings.get("aiEngineMode") or "CLOUD_LOCAL"
+        render_engine = settings.get("render_engine") or settings.get("renderEngine") or "FFmpeg Siêu Tốc (Chạy ngầm 100%)"
+        custom_draft_dir = config.get("capcut_draft_dir") or config.get("capcutDraftDir") or settings.get("capcut_draft_dir") or settings.get("capcutDraftDir") or ""
+        custom_capcut_exe = config.get("capcut_exe_path") or config.get("capcutExePath") or settings.get("capcut_exe_path") or settings.get("capcutExePath") or ""
+        account_type = str(settings.get("capcut_account_type") or settings.get("capcutAccountType") or "FREE").upper()
+        vip_voice = settings.get("capcut_vip_voice") or settings.get("capcutVipVoice") or "Cô Gái Hoạt Ngôn"
+        sync_speed = settings.get("capcut_sync_speed", settings.get("capcutSyncSpeed", True))
 
         is_ffmpeg_direct = ("ffmpeg" in render_engine.lower())
         is_capcut_draft_only = ("nháp" in render_engine.lower() or "draft" in render_engine.lower())
         is_capcut_auto = ("tự động hóa capcut" in render_engine.lower() or ("capcut" in render_engine.lower() and not is_capcut_draft_only and not is_ffmpeg_direct))
+        capcut_project_name = f"Reup_{re.sub(r'[\\\\/*?:\"<>|]', '_', final_task_name).strip()[:35]}"
 
         if is_capcut_auto:
-            from capcut_ui_controller import find_capcut_main_window, get_capcut_exe_path
-            win = find_capcut_main_window()
-            exe = get_capcut_exe_path(custom_capcut_exe)
-            if not win and not os.path.isfile(exe):
+            from capcut_ui_controller import find_capcut_main_window, get_capcut_exe_path, get_capcut_status
+            cc_status = get_capcut_status(custom_capcut_exe)
+            if not cc_status["is_running"] and not cc_status["exe_installed"]:
                 raise RuntimeError(
                     "Máy tính của bạn chưa cài đặt phần mềm CapCut PC! "
                     "Vui lòng chọn Chế độ xuất là '⚡ FFmpeg Siêu Tốc (Chạy ngầm 100%)' để tạo video trực tiếp không cần cài CapCut."
                 )
 
-            emit_progress(task_id, 20, "CapCut Auto Pipeline", f"Khởi động mô hình Tự Động Hóa CapCut Pro 5 Bước ({ai_engine_mode})...")
+            is_free_account = (account_type != "PRO")
+            tier_label = "Tài khoản Thường (Free-Safe)" if is_free_account else "Tài khoản Pro (VIP Full)"
+            state_note = f"CapCut đang mở sẵn ({cc_status['screen_state']})" if cc_status["is_running"] else "Sẽ tự mở CapCut PC"
+            emit_progress(task_id, 20, "CapCut Auto Pipeline", f"[{tier_label}] {state_note} - Khởi động quy trình 5 bước ({ai_engine_mode})...")
             from capcut_draft_generator import create_capcut_draft
             from capcut_ui_controller import run_native_capcut_pro_pipeline, open_draft_and_export
 
             # Step 1 & 2: Setup Draft & Visual Masking
-            emit_progress(task_id, 25, "BƯỚC 1 & 2: Nạp & Căn Sửa", "[CapCut Auto] Nạp Video gốc, căn canvas & áp dụng mặt nạ Blur che sub cũ...")
+            emit_progress(task_id, 25, "BƯỚC 1 & 2: Nạp & Căn Sửa", f"[{tier_label}] Nạp Video gốc & cấu hình Timeline chuẩn tỷ lệ...")
             subtitles_trans = []
             tts_segments = []
             voice_wav = None
 
-            account_type = settings.get("capcutAccountType", "PRO")
-            is_free_account = (account_type.upper() == "FREE")
-
-            if is_free_account or ai_engine_mode in ["HYBRID_PRO", "CLOUD_LOCAL"] or "tự động hóa capcut" in render_engine.lower():
-                # For FREE CapCut accounts: we pre-generate Subtitles & Voice via AI (Gemini + Edge-TTS)
+            if is_free_account or ai_engine_mode in ["HYBRID_PRO", "CLOUD_LOCAL"]:
+                # For FREE CapCut accounts (or Hybrid): pre-generate Subtitles & Voice via AI (Whisper + Gemini + Edge-TTS)
                 # and inject directly into Timeline so CapCut PC exports freely without hitting the PRO Paywall!
-                emit_progress(task_id, 35, "BƯỚC 3: Dịch Ngữ Cảnh", "[CapCut Free Safe] Bóc tách & Dịch ngữ cảnh chuẩn văn phong bằng Gemini...")
+                emit_progress(task_id, 35, "BƯỚC 3: Dịch Ngữ Cảnh", f"[{tier_label}] Bóc tách & Dịch ngữ cảnh bằng AI ngoài (tránh Paywall Auto Sub CapCut)...")
                 subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key, gemini_key)
                 genre = settings.get("genre", "Tự động")
-                quality = settings.get("translationQuality", "Tự nhiên / văn nói")
+                quality = settings.get("translation_quality") or settings.get("translationQuality") or "Tự nhiên / văn nói"
                 subtitles_trans = step_gemini_translation(task_id, subtitles, genre, quality, gemini_key, characters=characters)
 
-                # Generate TTS for timeline
-                voice_name = settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)")
-                speed = float(settings.get("speed", 1.0))
-                voice_wav = step_tts_synthesis(task_id, subtitles_trans, temp_dir, voice_name, speed)
+                # Generate TTS for timeline (Free accounts always use Edge-TTS; Hybrid Pro uses CapCut VIP TTS)
+                if is_free_account or ai_engine_mode == "CLOUD_LOCAL":
+                    voice_name = settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)")
+                    speed = float(settings.get("speed", 1.0))
+                    voice_wav = step_tts_synthesis(task_id, subtitles_trans, temp_dir, voice_name, speed)
 
                 for s in subtitles_trans:
                     seg_path = temp_dir / f"tts_{task_id}_{s['index']}.mp3"
-                    if not seg_path.exists():
+                    if not seg_path.exists() and voice_wav:
                         seg_path = voice_wav
                     tts_segments.append({
                         "start": s['start'],
                         "end": s['end'],
-                        "audio_path": seg_path,
+                        "audio_path": seg_path if seg_path else Path(""),
                         "text": s.get('trans', '')
                     })
 
-            # Create comprehensive Draft Project
+            # Create comprehensive Draft Project (FREE skips Pro blur effects, PRO includes native blur effect)
             draft_folder = create_capcut_draft(
-                project_name=f"Reup_{task_id}",
+                project_name=capcut_project_name,
                 raw_video_path=video_raw,
                 tts_audio_segments=tts_segments,
                 settings=settings,
                 old_sub_box=old_sub_box,
                 new_sub_box=new_sub_box,
-                custom_draft_dir=custom_draft_dir
+                custom_draft_dir=custom_draft_dir,
+                account_type=account_type
             )
 
-            vip_voice = settings.get("capcutVipVoice", "Cô Gái Hoạt Ngôn")
-            sync_speed = settings.get("capcutSyncSpeed", True)
-            account_type = settings.get("capcutAccountType", "PRO")
-
-            # Step 3, 4, 5: UI Automation (Auto Sub, Voice Sync, Export)
+            # Step 3, 4, 5: UI Automation (Smart detect already-open CapCut, Auto Sub/TTS for PRO, Free-safe Export for FREE)
             try:
                 run_native_capcut_pro_pipeline(
-                    project_name=f"Reup_{task_id}",
-                    output_filename=f"Reup_{task_id}",
+                    project_name=capcut_project_name,
+                    output_filename=capcut_project_name,
                     output_dir=output_dir,
                     ai_engine_mode=ai_engine_mode,
                     vip_voice=vip_voice,
@@ -1293,21 +1294,22 @@ def main():
             except Exception as e:
                 emit_progress(task_id, 88, "CapCut Cảnh Báo", f"CapCut UI chưa hoàn tất ({str(e)[:90]}). Chuyển sang FFmpeg để hoàn thiện video...")
 
-            final_mp4 = output_dir / f"Reup_{task_id}.mp4"
+            final_mp4 = output_dir / f"{capcut_project_name}.mp4"
             if not final_mp4.exists() or final_mp4.stat().st_size == 0:
                 # Guaranteed render fallback via FFmpeg if CapCut UI did not export file directly
                 emit_progress(task_id, 92, "Hoàn thiện Render", "Tối ưu hóa file xuất thành phẩm bằng FFmpeg siêu tốc...")
                 if not subtitles_trans:
                     subtitles = step_extract_and_transcribe(task_id, video_raw, temp_dir, groq_key, gemini_key)
-                    subtitles_trans = step_gemini_translation(task_id, subtitles, settings.get("genre", "Tự động"), settings.get("translationQuality", "Tự nhiên / văn nói"), gemini_key, characters=characters)
+                    subtitles_trans = step_gemini_translation(task_id, subtitles, settings.get("genre", "Tự động"), settings.get("translation_quality") or settings.get("translationQuality") or "Tự nhiên / văn nói", gemini_key, characters=characters)
+                if not voice_wav:
                     voice_wav = step_tts_synthesis(task_id, subtitles_trans, temp_dir, settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)"), float(settings.get("speed", 1.0)))
                 final_mp4 = step_render_video(
                     task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings, task_name=final_task_name
                 )
-                emit_done(task_id, str(final_mp4.resolve()), f"CapCut chưa xuất được file, đã hoàn tất xuất video qua FFmpeg: {final_mp4.name}")
+                emit_done(task_id, str(final_mp4.resolve()), f"[{tier_label}] Đã hoàn tất xuất video qua FFmpeg: {final_mp4.name}")
                 return
 
-            emit_done(task_id, str(final_mp4.resolve()), f"Quy trình Tự Động Hóa CapCut Pro ({ai_engine_mode}) hoàn tất: {final_mp4.name}")
+            emit_done(task_id, str(final_mp4.resolve()), f"[{tier_label}] Quy trình Tự Động Hóa CapCut hoàn tất: {final_mp4.name}")
             return
 
         # Step 2: Extract & ASR (For Cloud / Local mode)
@@ -1329,7 +1331,7 @@ def main():
         custom_capcut_exe = config.get("capcutExePath", "")
 
         if is_capcut_draft_only:
-            emit_progress(task_id, 85, "CapCut Draft", "Bơm Timeline vào dự án CapCut PC (com.lveditor.draft)...")
+            emit_progress(task_id, 85, "CapCut Draft", f"Bơm Timeline ({account_type}) vào dự án CapCut PC (com.lveditor.draft)...")
             from capcut_draft_generator import create_capcut_draft
 
             # Prepare audio segments list
@@ -1346,15 +1348,16 @@ def main():
                 })
 
             draft_folder = create_capcut_draft(
-                project_name=f"Reup_{task_id}",
+                project_name=capcut_project_name,
                 raw_video_path=video_raw,
                 tts_audio_segments=tts_segments,
                 settings=settings,
                 old_sub_box=old_sub_box,
                 new_sub_box=new_sub_box,
-                custom_draft_dir=custom_draft_dir
+                custom_draft_dir=custom_draft_dir,
+                account_type=account_type
             )
-            emit_done(task_id, str(draft_folder.resolve()), "Đã tạo Draft CapCut hoàn tất. Mở CapCut PC để xem dự án.")
+            emit_done(task_id, str(draft_folder.resolve()), f"Đã tạo Draft CapCut ({account_type}) hoàn tất: {capcut_project_name}. Mở CapCut PC để xem dự án.")
 
         elif "capcut_auto" in render_engine.lower() or "Tự Động Hóa CapCut" in render_engine:
             emit_progress(task_id, 85, "CapCut Auto", "Tạo Timeline và điều khiển CapCut tự động xuất video...")

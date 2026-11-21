@@ -264,6 +264,19 @@ export const useStudioStore = create<StudioState>((set, get) => ({
           if (cfg.new_sub_box || cfg.newSubBox) {
             set({ newSubBox: cfg.new_sub_box || cfg.newSubBox });
           }
+          // Restore CapCut & Render Engine settings
+          set((state) => ({
+            settings: {
+              ...state.settings,
+              renderEngine: cfg.render_engine || cfg.renderEngine || state.settings.renderEngine,
+              aiEngineMode: cfg.ai_engine_mode || cfg.aiEngineMode || state.settings.aiEngineMode,
+              capcutAccountType: (cfg.capcut_account_type || cfg.capcutAccountType || state.settings.capcutAccountType || 'FREE') as 'PRO' | 'FREE',
+              capcutVipVoice: cfg.capcut_vip_voice || cfg.capcutVipVoice || state.settings.capcutVipVoice,
+              capcutSyncSpeed: cfg.capcut_sync_speed !== undefined ? cfg.capcut_sync_speed : state.settings.capcutSyncSpeed,
+              capcutDraftDir: cfg.capcut_draft_dir || cfg.capcutDraftDir || state.settings.capcutDraftDir,
+              capcutExePath: cfg.capcut_exe_path || cfg.capcutExePath || state.settings.capcutExePath,
+            },
+          }));
         }
       }
     } catch {
