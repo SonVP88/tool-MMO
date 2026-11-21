@@ -51,6 +51,57 @@ def get_default_output_dir() -> Path:
     p.mkdir(parents=True, exist_ok=True)
     return p
 
+import re
+
+def resolve_media_name(url_or_path: str, default_prefix: str = "Video") -> str:
+    """
+    Intelligently extracts the true title or ID from YouTube, Douyin, TikTok, Bilibili or local file.
+    Prevents any video from ever being named 'watch' or losing its identity.
+    """
+    url_str = url_or_path.strip()
+    if url_str.startswith("watch?v="):
+        url_str = f"https://www.youtube.com/{url_str}"
+    elif url_str.startswith("youtu.be/"):
+        url_str = f"https://{url_str}"
+    elif url_str.startswith("v.douyin.com/") or url_str.startswith("tiktok.com/"):
+        url_str = f"https://{url_str}"
+
+    # YouTube URL: extract video ID and attempt quick title extraction
+    yt_m = re.search(r'(?:v=|\/shorts\/|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})', url_str)
+    if yt_m:
+        vid_id = yt_m.group(1)
+        try:
+            import yt_dlp
+            with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True, 'socket_timeout': 3}) as ydl:
+                info = ydl.extract_info(url_str, download=False)
+                t = info.get('title')
+                if t:
+                    clean = re.sub(r'[\\/*?:"<>|]', '_', t).strip()[:40]
+                    if clean and clean.lower() not in ["watch", "index", "video"]:
+                        return clean
+        except Exception:
+            pass
+        return f"YouTube_{vid_id}"
+
+    # TikTok / Douyin
+    if "douyin.com" in url_str or "tiktok.com" in url_str:
+        dy_m = re.search(r'video\/(\d+)', url_str)
+        if dy_m:
+            return f"Douyin_{dy_m.group(1)}"
+        return f"Douyin_{int(time.time()) % 100000}"
+
+    # Bilibili
+    bili_m = re.search(r'(BV[a-zA-Z0-9]+)', url_str)
+    if bili_m:
+        return f"Bilibili_{bili_m.group(1)}"
+
+    # Local file or generic URL
+    stem = Path(url_str.split("?")[0]).stem.strip()
+    if stem and stem.lower() not in ["watch", "index", "video", "play", "share"]:
+        return re.sub(r'[\\/*?:"<>|]', '_', stem)[:40]
+
+    return f"{default_prefix}_{int(time.time() * 1000) % 100000}"
+
 # State
 active_tasks = []
 task_lock = threading.Lock()
@@ -140,9 +191,11 @@ def worker_thread_loop():
 
         # Always execute live python pipeline script
         script_path = BASE_DIR / "python-worker" / "pipeline_worker.py"
+        task_name = task_to_run.get("name", "")
         cmd = [
             sys.executable, str(script_path),
             "--task-id", str(task_id),
+            "--name", str(task_name),
             "--source", str(source),
             "--output-dir", str(output_dir),
             "--config", config_str
@@ -187,6 +240,11 @@ def worker_thread_loop():
                                 t["note"] = msg
                                 if out_path:
                                     t["outputPath"] = out_path
+                                    clean_stem = Path(out_path).stem
+                                    if clean_stem.startswith("Reup_"):
+                                        clean_stem = clean_stem[5:]
+                                    if clean_stem:
+                                        t["name"] = clean_stem
                                 if evt_type == "done":
                                     t["status"] = "DONE"
                                 elif evt_type == "error":
@@ -685,14 +743,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
                                 added.append(new_item)
                         continue
 
-                    if item_str.startswith("watch?v="):
-                        item_str = f"https://www.youtube.com/{item_str}"
-                    elif item_str.startswith("youtu.be/"):
-                        item_str = f"https://{item_str}"
-                    elif item_str.startswith("v.douyin.com/") or item_str.startswith("tiktok.com/"):
-                        item_str = f"https://{item_str}"
-
-                    name = Path(item_str.split("?")[0]).stem or f"Video_{base_id + idx}"
+                    name = resolve_media_name(item_str, f"Video_{base_id + idx}")
                     new_item = {
                         "id": base_id + idx,
                         "name": name,

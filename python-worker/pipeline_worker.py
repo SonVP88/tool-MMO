@@ -133,7 +133,7 @@ def seconds_to_ass_time(seconds: float) -> str:
     return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
 
 # ==================== STEP 1: DOWNLOAD / INPUT ====================
-def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data: str = None) -> Path:
+def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data: str = None, preferred_name: str = "") -> tuple:
     source_clean = source.strip()
     # Normalize common link patterns
     if source_clean.startswith("watch?v="):
@@ -153,29 +153,33 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
     temp_dir.mkdir(parents=True, exist_ok=True)
     raw_video = temp_dir / f"input_raw_{task_id}.mp4"
 
-    # Check if local file
-    candidate_paths = [
-        Path(source_clean),
-        BASE_DIR / source_clean,
-        Path.cwd() / source_clean,
-        BASE_DIR / "python-worker" / source_clean,
-        BASE_DIR / "python-worker" / "temp" / Path(source_clean).name,
-        BASE_DIR / "python-worker" / "temp" / "uploads" / Path(source_clean).name,
-        BASE_DIR / "temp" / Path(source_clean).name,
-    ]
-    for cand in candidate_paths:
-        try:
-            if cand.exists() and cand.is_file():
-                if cand.resolve() != raw_video.resolve():
-                    emit_progress(task_id, 15, "Tải video", f"Sao chép file video nội bộ: {cand.name}")
-                    shutil.copy2(str(cand), str(raw_video))
-                emit_progress(task_id, 20, "Tải video", "Nhập video hoàn tất.")
-                return raw_video
-        except Exception:
-            pass
+    is_url = source_clean.startswith("http://") or source_clean.startswith("https://")
 
-    # Is URL -> run yt-dlp with android client bypass
-    emit_progress(task_id, 10, "Tải video", f"[yt-dlp] Đang phân tích và tải link: {source_clean}")
+    # Local file candidate lookup ONLY if it is not a web URL
+    if not is_url:
+        candidate_paths = [
+            Path(source_clean),
+            BASE_DIR / source_clean,
+            Path.cwd() / source_clean,
+            BASE_DIR / "python-worker" / source_clean,
+            BASE_DIR / "python-worker" / "temp" / Path(source_clean).name,
+            BASE_DIR / "python-worker" / "temp" / "uploads" / Path(source_clean).name,
+            BASE_DIR / "temp" / Path(source_clean).name,
+        ]
+        for cand in candidate_paths:
+            try:
+                if cand.exists() and cand.is_file():
+                    if cand.resolve() != raw_video.resolve():
+                        emit_progress(task_id, 15, "Tải video", f"Sao chép file video nội bộ: {cand.name}")
+                        shutil.copy2(str(cand), str(raw_video))
+                    emit_progress(task_id, 20, "Tải video", "Nhập video hoàn tất.")
+                    clean_name = preferred_name if preferred_name and preferred_name.lower() not in ["watch", "index", "video"] else cand.stem
+                    return raw_video, clean_name
+            except Exception:
+                pass
+
+    # Is URL -> run yt-dlp with full ffmpeg integration
+    emit_progress(task_id, 10, "Tải video", f"[yt-dlp] Đang kết nối và tải video từ URL: {source_clean}")
     try:
         import yt_dlp
         cookie_file = None
@@ -184,9 +188,12 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
             with open(cookie_file, "w", encoding="utf-8") as cf:
                 cf.write(cookie_data)
 
+        ffmpeg_exe = get_ffmpeg_path()
         ydl_opts = {
             'outtmpl': str(raw_video.with_suffix('')) + '.%(ext)s',
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo+bestaudio/best',
+            'merge_output_format': 'mp4',
+            'ffmpeg_location': ffmpeg_exe,
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android', 'ios']
@@ -198,16 +205,39 @@ def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data
         if cookie_file:
             ydl_opts['cookiefile'] = str(cookie_file)
 
+        downloaded_title = ""
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([source_clean])
+            info = ydl.extract_info(source_clean, download=True)
+            if info:
+                downloaded_title = info.get("title", "")
 
         # Find downloaded file
         matching = list(temp_dir.glob(f"input_raw_{task_id}.*"))
         if matching:
-            raw_video = matching[0]
-            emit_progress(task_id, 20, "Tải video", f"Tải hoàn tất: {raw_video.name}")
-            return raw_video
-        raise RuntimeError(f"yt-dlp không tải được video từ: {source_clean}")
+            downloaded = matching[0]
+            if downloaded.suffix.lower() != ".mp4":
+                cmd_conv = [
+                    ffmpeg_exe, "-y",
+                    "-i", str(downloaded),
+                    "-c:v", "copy", "-c:a", "aac",
+                    str(raw_video)
+                ]
+                subprocess.run(cmd_conv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if raw_video.exists():
+                    downloaded = raw_video
+
+            final_title = ""
+            if downloaded_title:
+                clean_t = re.sub(r'[\\/*?:"<>|]', '_', downloaded_title).strip()[:45]
+                if clean_t and clean_t.lower() not in ["watch", "index", "video"]:
+                    final_title = clean_t
+            if not final_title:
+                final_title = preferred_name if preferred_name and preferred_name.lower() not in ["watch", "index", "video"] else f"Video_{task_id}"
+
+            emit_progress(task_id, 20, "Tải video", f"Tải hoàn tất: {final_title} ({downloaded.name})")
+            return downloaded, final_title
+
+        raise RuntimeError(f"yt-dlp không thể tạo file video từ: {source_clean}")
     except Exception as e:
         emit_progress(task_id, 15, "Tải video", f"Lỗi tải video: {str(e)[:100]}")
         raise RuntimeError(f"Không thể mở hoặc tải video từ nguồn: '{source_clean}'. Chi tiết lỗi: {str(e)[:120]}")
@@ -819,11 +849,13 @@ def step_render_video(
     settings: dict,
     old_sub_box: dict,
     new_sub_box: dict,
-    anti_settings: dict = None
+    anti_settings: dict = None,
+    task_name: str = None
 ) -> Path:
     emit_progress(task_id, 82, "Render video", "Tạo file phụ đề và cấu hình bộ lọc...")
     output_dir.mkdir(parents=True, exist_ok=True)
-    final_output = output_dir / f"Reup_{task_id}.mp4"
+    clean_name = re.sub(r'[\\/*?:"<>|]', '_', task_name).strip()[:45] if task_name else str(task_id)
+    final_output = output_dir / f"Reup_{clean_name}.mp4"
     if final_output.exists():
         try:
             final_output.unlink()
@@ -886,9 +918,11 @@ def step_render_video(
     bw = max(4, min(bw, vid_w - bx))
     bh = max(4, min(bh, vid_h - by))
 
-    blur_r = max(5, int(settings.get('blurRadius', 25)))
-    blur_luma = max(2, min(14, int(blur_r / 2)))
-    blur_chroma = max(1, min(7, int(blur_luma / 2)))
+    max_safe_blur = max(1, int(min(bw, bh) / 2) - 1)
+    raw_blur = int(settings.get('blurRadius', 25))
+    blur_r = max(1, min(max_safe_blur, raw_blur))
+    blur_luma = max(1, min(max_safe_blur, int(blur_r / 2) if blur_r > 2 else 1))
+    blur_chroma = max(1, min(max_safe_blur, int(blur_luma / 2) if blur_luma > 2 else 1))
 
     # Volumes
     orig_vol = float(settings.get('originalAudioVolume', 20)) / 100.0
@@ -958,7 +992,7 @@ def step_render_video(
                 ffmpeg_exe, "-y",
                 "-i", str(raw_video),
                 "-i", str(voice_wav),
-                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vblurred];[vblurred]subtitles=filename='{srt_rel}'{anti_part}[vout];{audio_filter_part}",
+                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_luma}:1:{blur_chroma}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}[vblurred];[vblurred]subtitles=filename='{srt_rel}'{anti_part}[vout];{audio_filter_part}",
                 "-map", "[vout]",
                 "-map", "[aout]",
                 "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
@@ -970,7 +1004,7 @@ def step_render_video(
             cmd_fallback = [
                 ffmpeg_exe, "-y",
                 "-i", str(raw_video),
-                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_r}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}{anti_part}[vout]",
+                "-filter_complex", f"[0:v]crop=w={bw}:h={bh}:x={bx}:y={by},boxblur={blur_luma}:1:{blur_chroma}:1[blurred];[0:v][blurred]overlay=x={bx}:y={by}{anti_part}[vout]",
                 "-map", "[vout]",
                 "-map", "0:a?",
                 "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
@@ -1110,12 +1144,14 @@ def get_system_font_path() -> str:
 def main():
     parser = argparse.ArgumentParser(description="MMO Studio Video Pipeline")
     parser.add_argument("--task-id", type=int, required=True)
+    parser.add_argument("--name", type=str, default="")
     parser.add_argument("--source", type=str, required=True)
     parser.add_argument("--output-dir", type=str, default=str(BASE_DIR / "output"))
     parser.add_argument("--config", type=str, default="{}")
     args = parser.parse_args()
 
     task_id = args.task_id
+    initial_name = args.name
     source = args.source
     output_dir = Path(args.output_dir)
 
@@ -1123,6 +1159,9 @@ def main():
         config = json.loads(args.config)
     except Exception:
         config = {}
+
+    if not initial_name:
+        initial_name = config.get("task_name", config.get("name", ""))
 
     settings = config.get("settings", config)
     old_sub_box = config.get("oldSubBlurBox", config.get("old_sub_blur_box", {"x": 18, "y": 72, "width": 32, "height": 9}))
@@ -1161,7 +1200,8 @@ def main():
             return
 
         # Step 1: Input / Download
-        video_raw = step_download_or_copy(task_id, source, temp_dir, cookie_data)
+        video_raw, extracted_title = step_download_or_copy(task_id, source, temp_dir, cookie_data, preferred_name=initial_name)
+        final_task_name = extracted_title or initial_name or str(task_id)
 
         # Check AI Engine Mode & Render Engine
         ai_engine_mode = settings.get("aiEngineMode", "CLOUD_LOCAL")
@@ -1263,7 +1303,7 @@ def main():
                     subtitles_trans = step_gemini_translation(task_id, subtitles, settings.get("genre", "Tự động"), settings.get("translationQuality", "Tự nhiên / văn nói"), gemini_key, characters=characters)
                     voice_wav = step_tts_synthesis(task_id, subtitles_trans, temp_dir, settings.get("voice", "Cô Gái Hoạt Ngôn (vi-VN)"), float(settings.get("speed", 1.0)))
                 final_mp4 = step_render_video(
-                    task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
+                    task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings, task_name=final_task_name
                 )
                 emit_done(task_id, str(final_mp4.resolve()), f"CapCut chưa xuất được file, đã hoàn tất xuất video qua FFmpeg: {final_mp4.name}")
                 return
@@ -1357,14 +1397,14 @@ def main():
 
             # Also produce guaranteed final MP4
             final_video = step_render_video(
-                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
+                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings, task_name=final_task_name
             )
             emit_done(task_id, str(final_video.resolve()), "Tự động hóa CapCut và render video hoàn tất.")
 
         else:
             # Default: FFmpeg Super Fast
             final_video = step_render_video(
-                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings
+                task_id, video_raw, voice_wav, subtitles_trans, temp_dir, output_dir, settings, old_sub_box, new_sub_box, anti_settings=anti_settings, task_name=final_task_name
             )
             emit_done(task_id, str(final_video.resolve()), "Render video và hoàn tất toàn bộ quy trình")
 

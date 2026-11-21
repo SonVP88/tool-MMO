@@ -42,11 +42,16 @@ def auto_setup_dependencies():
     # 1. yt-dlp.exe
     ytdlp_target = bin_dir / "yt-dlp.exe"
     if not ytdlp_target.exists():
-        # Check if already in Python Scripts
-        py_ytdlp = Path(os.path.expanduser(r"~\AppData\Local\Python\pythoncore-3.14-64\Scripts\yt-dlp.exe"))
-        if py_ytdlp.exists():
-            shutil.copy2(py_ytdlp, ytdlp_target)
-            print(f"[COPIED] Đã sao chép yt-dlp từ hệ thống vào bin/yt-dlp.exe", flush=True)
+        # Dynamically locate yt-dlp from PATH or current Python environment (no hardcoded user/version paths)
+        found_ytdlp = shutil.which("yt-dlp")
+        if not found_ytdlp:
+            candidate = Path(sys.prefix) / "Scripts" / "yt-dlp.exe"
+            if candidate.exists():
+                found_ytdlp = str(candidate)
+
+        if found_ytdlp and os.path.exists(found_ytdlp):
+            shutil.copy2(found_ytdlp, ytdlp_target)
+            print(f"[COPIED] Đã sao chép yt-dlp từ hệ thống ({found_ytdlp}) vào bin/yt-dlp.exe", flush=True)
         else:
             url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
             try:

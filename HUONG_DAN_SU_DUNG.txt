@@ -20,7 +20,7 @@ A. API Key Dich Thuat & Whisper:
    - Bam "Kiem Tra Key" -> Bao xanh thanh cong thi bam "Luu Cau Hinh".
 
 B. Thu Muc Xuat Video:
-   - Thu muc mac dinh la C:\Output.
+   - Thu muc mac dinh la thu muc "output" ngay trong thu muc phan mem.
    - Co the sua thanh D:\VideoXuat hoac E:\ThanhPham tai muc "Cai Dat Xu Ly Hang Loat".
 
 

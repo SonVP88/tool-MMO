@@ -444,16 +444,29 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       });
     } else {
       const baseId = Date.now();
-      const newTasks: TaskItem[] = items.map((item, idx) => ({
-        id: baseId + idx,
-        name: item.split(/[\/\\]/).pop()?.replace('.mp4', '') || `Video_${baseId + idx}`,
-        stage: 'Chờ chạy',
-        progress: 0,
-        status: 'WAITING',
-        note: 'Vừa thêm vào hàng đợi thực',
-        outputPath: `${get().outputDir ? `${get().outputDir}/` : ''}Reup_${item.split(/[\/\\]/).pop() || 'Video'}.mp4`,
-        selected: false,
-      }));
+      const newTasks: TaskItem[] = items.map((item, idx) => {
+        let taskName = `Video_${baseId + idx}`;
+        const ytMatch = item.match(/(?:v=|\/shorts\/|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+        if (ytMatch) {
+          taskName = `YouTube_${ytMatch[1]}`;
+        } else {
+          const clean = item.split(/[?#]/)[0].split(/[\/\\]/).pop()?.replace(/\.[^/.]+$/, '') || '';
+          if (clean && !['watch', 'index', 'video', 'play', 'share'].includes(clean.toLowerCase())) {
+            taskName = clean;
+          }
+        }
+        return {
+          id: baseId + idx,
+          name: taskName,
+          source: item,
+          stage: 'Chờ chạy',
+          progress: 0,
+          status: 'WAITING',
+          note: 'Vừa thêm vào hàng đợi thực',
+          outputPath: `${get().outputDir ? `${get().outputDir}/` : ''}Reup_${taskName}.mp4`,
+          selected: false,
+        };
+      });
       set((state) => ({
         tasks: [...state.tasks, ...newTasks],
         globalProgress: {

@@ -48,7 +48,7 @@ Trước khi bấm chạy video đầu tiên, bạn cần cấu hình 2 thông t
 4. Bấm **"Lưu Cấu Hình"**.
 
 ### B. Chọn Thư Mục Xuất Video
-* Thư mục mặc định xuất file là `C:\Output`.
+* Thư mục mặc định xuất file là thư mục `output` ngay trong thư mục phần mềm (rất tiện, không cần quyền Admin).
 * Nếu muốn đổi sang ổ đĩa khác (như `D:\VideoXuat` hoặc `E:\ThanhPham`):
   - Kéo xuống bảng **CÀI ĐẶT XỬ LÝ HÀNG LOẠT** ở góc dưới bên phải.
   - Sửa đường dẫn tại ô **Thư mục xuất**.

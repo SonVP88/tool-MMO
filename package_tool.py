@@ -72,6 +72,7 @@ def package_with_password(password, output_format="7z"):
         "dist",
         "python-worker",
         "run_desktop_app.py",
+        "CHAY_APP.bat",
         "Chay_App_Desktop.bat",
         "1_Cai_Dat_Moi_Truong.bat",
         "requirements.txt",
