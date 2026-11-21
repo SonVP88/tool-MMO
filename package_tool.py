@@ -6,15 +6,17 @@ from pathlib import Path
 from datetime import datetime
 
 ROOT_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = ROOT_DIR / "tool-MMO"
+PROJECT_DIR = ROOT_DIR if (ROOT_DIR / "python-worker").exists() else (ROOT_DIR / "tool-MMO")
 
 def find_7zip():
+    pf = os.environ.get("ProgramFiles", "")
+    pf_x86 = os.environ.get("ProgramFiles(x86)", "")
     candidates = [
-        r"C:\Program Files\7-Zip\7z.exe",
-        r"C:\Program Files (x86)\7-Zip\7z.exe",
+        os.path.join(pf, "7-Zip", "7z.exe") if pf else "",
+        os.path.join(pf_x86, "7-Zip", "7z.exe") if pf_x86 else "",
     ]
     for c in candidates:
-        if os.path.exists(c):
+        if c and os.path.exists(c):
             return c
     # Try PATH
     z_path = shutil.which("7z")

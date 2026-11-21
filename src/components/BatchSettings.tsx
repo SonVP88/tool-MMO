@@ -13,7 +13,8 @@ import {
   Sparkles, 
   HardDrive, 
   Folder, 
-  FolderOpen 
+  FolderOpen,
+  RefreshCcw
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
 import { apiSelectFolder } from '../services/tauriBridge';
@@ -29,7 +30,12 @@ export const BatchSettingsForm: React.FC = () => {
     setTranslationConfigOpen,
     setCapCutConfigOpen,
     setCharacterModalOpen,
+    freeVoices,
+    proVoices,
+    refreshVoices,
   } = useStudioStore();
+
+  const activeCapcutVoices = settings.capcutAccountType === 'FREE' ? freeVoices : proVoices;
 
   const handleSyncCharacters = () => {
     setCharacterModalOpen(true);
@@ -250,30 +256,32 @@ export const BatchSettingsForm: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-0.5 font-medium">
-                  {settings.capcutAccountType === 'FREE' ? 'Giọng đọc tự nhiên:' : 'Giọng đọc VIP CapCut:'}
-                </label>
+                <div className="flex items-center justify-between mb-0.5">
+                  <label className="text-[10px] text-slate-400 font-medium">
+                    {settings.capcutAccountType === 'FREE' ? 'Giọng đọc tự nhiên (Edge-TTS Live):' : 'Giọng đọc VIP CapCut (config/voices.json):'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={refreshVoices}
+                    title="Tải lại danh sách giọng đọc mới nhất"
+                    className="text-[9px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <RefreshCcw className="w-2.5 h-2.5" /> Tải lại
+                  </button>
+                </div>
                 <select
-                  value={settings.capcutVipVoice || 'Cô Gái Hoạt Ngôn'}
+                  value={settings.capcutVipVoice || (activeCapcutVoices[0]?.value ?? '')}
                   onChange={(e) => updateSettings({ capcutVipVoice: e.target.value })}
                   className="w-full bg-[#111722] border border-[#233145] rounded px-2 py-1 text-[11px] text-amber-300 font-semibold focus:outline-none"
                 >
-                  {settings.capcutAccountType === 'FREE' ? (
-                    <>
-                      <option value="Cô Gái Hoạt Ngôn (Free)">Cô Gái Hoạt Ngôn (Tự Nhiên)</option>
-                      <option value="Nam Miền Bắc Trầm Ấm">Nam Trầm Ấm (Chuẩn)</option>
-                      <option value="Nam Miền Nam Truyền Cảm">Nam Truyền Cảm</option>
-                      <option value="Chị Google">Chị Google (Chuẩn)</option>
-                    </>
+                  {activeCapcutVoices.length === 0 ? (
+                    <option value="">Đang tải danh sách giọng...</option>
                   ) : (
-                    <>
-                      <option value="Cô Gái Hoạt Ngôn">Cô Gái Hoạt Ngôn (Nữ VIP)</option>
-                      <option value="Nam Trầm Ấm">Nam Trầm Ấm (Nam VIP)</option>
-                      <option value="Thanh Niên Tự Tin">Thanh Niên Tự Tin (Nam Trẻ)</option>
-                      <option value="Review Phim Hài">Review Phim Hài (Kể Chuyện)</option>
-                      <option value="Chị Google">Chị Google (Truyền Thống)</option>
-                      <option value="Nữ MC Tin Tức">Nữ MC Tin Tức (Trang Trọng)</option>
-                    </>
+                    activeCapcutVoices.map((v) => (
+                      <option key={v.value} value={v.value}>
+                        {v.label}
+                      </option>
+                    ))
                   )}
                 </select>
               </div>
@@ -364,20 +372,33 @@ export const BatchSettingsForm: React.FC = () => {
         </button>
       </div>
 
-      {/* Voice Selection */}
+      {/* Voice Selection (Dynamic Live Edge-TTS) */}
       <div className="flex flex-col gap-1">
-        <label className="text-slate-400 text-[11px] font-semibold">Giọng đọc:</label>
+        <div className="flex items-center justify-between">
+          <label className="text-slate-400 text-[11px] font-semibold">Giọng đọc AI (Live):</label>
+          <button
+            type="button"
+            onClick={refreshVoices}
+            className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer"
+          >
+            <RefreshCcw className="w-2.5 h-2.5" /> Cập nhật
+          </button>
+        </div>
         <div className="relative">
           <select
-            value={settings.voice}
+            value={settings.voice || (freeVoices[0]?.value ?? '')}
             onChange={(e) => updateSettings({ voice: e.target.value })}
             className="w-full bg-[#0f141c] border border-[#26354a] rounded-md px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 appearance-none cursor-pointer"
           >
-            <option value="Cô Gái Hoạt Ngôn (vi-VN)">Cô Gái Hoạt Ngôn (vi-VN)</option>
-            <option value="Nam Miền Bắc Trầm Ấm (vi-VN)">Nam Miền Bắc Trầm Ấm (vi-VN)</option>
-            <option value="Nam Miền Nam Truyền Cảm (vi-VN)">Nam Miền Nam Truyền Cảm (vi-VN)</option>
-            <option value="Nữ Nhẹ Nhàng (vi-VN)">Nữ Nhẹ Nhàng (vi-VN)</option>
-            <option value="Giọng Trầm Kể Chuyện (vi-VN)">Giọng Trầm Kể Chuyện (vi-VN)</option>
+            {freeVoices.length === 0 ? (
+              <option value="">Đang tải danh sách giọng từ Edge-TTS...</option>
+            ) : (
+              freeVoices.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))
+            )}
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2.5 pointer-events-none" />
         </div>

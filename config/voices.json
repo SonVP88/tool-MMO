@@ -1,0 +1,10 @@
+{
+  "capcut_pro_voices": [
+    { "value": "Cô Gái Hoạt Ngôn", "label": "Cô Gái Hoạt Ngôn (CapCut Pro)", "gender": "Female" },
+    { "value": "Nam Trầm Ấm", "label": "Nam Trầm Ấm (CapCut Pro)", "gender": "Male" },
+    { "value": "Thanh Niên Tự Tin", "label": "Thanh Niên Tự Tin (CapCut Pro)", "gender": "Male" },
+    { "value": "Review Phim Hài", "label": "Review Phim Hài (CapCut Pro)", "gender": "Male" },
+    { "value": "Nữ MC Tin Tức", "label": "Nữ MC Tin Tức (CapCut Pro)", "gender": "Female" },
+    { "value": "Chị Google", "label": "Chị Google (Truyền Thống)", "gender": "Female" }
+  ]
+}

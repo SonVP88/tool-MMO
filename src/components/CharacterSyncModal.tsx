@@ -9,14 +9,15 @@ export const CharacterSyncModal: React.FC = () => {
     setCharacterModalOpen, 
     characters, 
     setCharacters, 
-    addLog 
+    addLog,
+    freeVoices,
   } = useStudioStore();
 
   const [localChars, setLocalChars] = useState<CharacterMapping[]>(characters);
   const [newOrig, setNewOrig] = useState('');
   const [newTrans, setNewTrans] = useState('');
   const [newPronoun, setNewPronoun] = useState('Ta - Ngươi');
-  const [newVoice, setNewVoice] = useState('Cô Gái Hoạt Ngôn (vi-VN)');
+  const [newVoice, setNewVoice] = useState('');
 
   if (!isCharacterModalOpen) return null;
 
@@ -110,14 +111,19 @@ export const CharacterSyncModal: React.FC = () => {
           <div>
             <label className="text-[11px] font-semibold text-slate-400 block mb-1">Giọng đọc gán riêng:</label>
             <select
-              value={newVoice}
+              value={newVoice || (freeVoices[0]?.value ?? '')}
               onChange={(e) => setNewVoice(e.target.value)}
               className="w-full bg-[#0a0f16] border border-[#233145] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
             >
-              <option value="Cô Gái Hoạt Ngôn (vi-VN)">Cô Gái Hoạt Ngôn (vi-VN)</option>
-              <option value="Nam Miền Bắc Trầm Ấm (vi-VN)">Nam Miền Bắc Trầm Ấm (vi-VN)</option>
-              <option value="Nam Truyện Cổ Tích Lão Niên (vi-VN)">Nam Truyện Cổ Tích Lão Niên (vi-VN)</option>
-              <option value="Nữ Trẻ Trung Miền Nam (vi-VN)">Nữ Trẻ Trung Miền Nam (vi-VN)</option>
+              {freeVoices.length === 0 ? (
+                <option value="">Đang tải giọng đọc...</option>
+              ) : (
+                freeVoices.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))
+              )}
             </select>
           </div>
           <div>

@@ -368,3 +368,23 @@ export async function apiGetCapcutStatus(): Promise<CapcutStatus> {
     exe_path: '',
   };
 }
+
+export interface VoiceOption {
+  value: string;
+  label: string;
+  gender?: string;
+  locale?: string;
+  source?: string;
+}
+
+export async function apiGetVoices(): Promise<{ free_voices: VoiceOption[]; pro_voices: VoiceOption[] }> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/api/voices`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    // ignore
+  }
+  return { free_voices: [], pro_voices: [] };
+}

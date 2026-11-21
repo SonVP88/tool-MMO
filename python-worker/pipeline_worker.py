@@ -643,7 +643,7 @@ def step_tts_synthesis(task_id: int, subtitles: list, temp_dir: Path, voice_name
         "Nữ Nhẹ Nhàng (vi-VN)": "vi-VN-HoaiMyNeural",
         "Giọng Trầm Kể Chuyện (vi-VN)": "vi-VN-NamMinhNeural",
     }
-    voice_tag = voice_map.get(voice_name, "vi-VN-HoaiMyNeural")
+    voice_tag = voice_name if str(voice_name).endswith("Neural") else voice_map.get(voice_name, "vi-VN-HoaiMyNeural")
 
     rate_percent = int((speed - 1.0) * 100)
     rate_str = f"+{rate_percent}%" if rate_percent >= 0 else f"{rate_percent}%"
@@ -1059,7 +1059,7 @@ def step_produce_audio_novel(
         "Giọng Trầm Kể Chuyện (vi-VN)": "vi-VN-NamMinhNeural",
         "Chị Google": "vi-VN-HoaiMyNeural",
     }
-    v_code = voice_code_map.get(voice, "vi-VN-NamMinhNeural")
+    v_code = voice if str(voice).endswith("Neural") else voice_code_map.get(voice, "vi-VN-NamMinhNeural")
 
     emit_progress(task_id, 35, "Lồng tiếng AI", f"Tổng hợp giọng đọc truyền cảm ({voice})...")
     rate_str = f"+{int((speed - 1.0) * 100)}%" if speed >= 1.0 else f"-{int((1.0 - speed) * 100)}%"

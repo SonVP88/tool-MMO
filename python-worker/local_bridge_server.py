@@ -453,6 +453,84 @@ class StudioAPIHandler(BaseHTTPRequestHandler):
                 self.send_json({"is_running": False, "screen_state": "CLOSED", "window_title": "", "exe_installed": False, "error": str(e)})
             return
 
+        if path == "/api/voices":
+            free_voices = []
+            pro_voices = []
+
+            # 1. Dynamically query live Microsoft Edge-TTS Neural Voices (vi-VN + Multilingual)
+            try:
+                import asyncio, edge_tts
+                async def _fetch_edge_voices():
+                    return await edge_tts.list_voices()
+                all_edge = asyncio.run(_fetch_edge_voices())
+                for v in all_edge:
+                    short_name = v.get("ShortName", "")
+                    locale = v.get("Locale", "")
+                    gender = v.get("Gender", "")
+                    gender_vi = "Nữ" if gender == "Female" else ("Nam" if gender == "Male" else gender)
+                    if locale.startswith("vi-"):
+                        display = short_name.replace("vi-VN-", "").replace("Neural", "")
+                        free_voices.append({
+                            "value": short_name,
+                            "label": f"{display} ({gender_vi} - {short_name})",
+                            "gender": gender,
+                            "locale": locale,
+                            "source": "edge-tts-live"
+                        })
+                # Also include top Multilingual Neural voices that speak Vietnamese fluently
+                for v in all_edge:
+                    short_name = v.get("ShortName", "")
+                    gender = v.get("Gender", "")
+                    locale = v.get("Locale", "")
+                    if "MultilingualNeural" in short_name and locale.startswith("en-US"):
+                        gender_vi = "Nữ" if gender == "Female" else "Nam"
+                        display = short_name.replace("en-US-", "").replace("MultilingualNeural", "")
+                        free_voices.append({
+                            "value": short_name,
+                            "label": f"{display} Đa Ngôn Ngữ ({gender_vi} - {short_name})",
+                            "gender": gender,
+                            "locale": locale,
+                            "source": "edge-tts-live"
+                        })
+            except Exception:
+                pass
+
+            # 2. Load CapCut Pro voices from external editable config/voices.json + scan CapCut local cache
+            voices_cfg_file = CONFIG_DIR / "voices.json"
+            if voices_cfg_file.exists():
+                try:
+                    with open(voices_cfg_file, "r", encoding="utf-8") as vf:
+                        vdata = json.load(vf)
+                        for item in vdata.get("capcut_pro_voices", []):
+                            if isinstance(item, dict) and item.get("value"):
+                                pro_voices.append(item)
+                except Exception:
+                    pass
+
+            # Scan CapCut local user custom voice clones if installed
+            try:
+                local_appdata = os.environ.get("LOCALAPPDATA", "")
+                if local_appdata:
+                    cc_voice_dir = Path(local_appdata) / "CapCut" / "User Data" / "Cache" / "voice"
+                    if cc_voice_dir.exists():
+                        existing_vals = {p["value"] for p in pro_voices}
+                        for f in cc_voice_dir.iterdir():
+                            if f.is_dir() and f.name not in existing_vals:
+                                pro_voices.append({
+                                    "value": f.name,
+                                    "label": f"{f.name} (CapCut Local)",
+                                    "gender": "Custom",
+                                    "source": "capcut-local"
+                                })
+            except Exception:
+                pass
+
+            self.send_json({
+                "free_voices": free_voices,
+                "pro_voices": pro_voices
+            })
+            return
+
         if path == "/api/profiles":
             profiles = []
             if PROFILES_FILE.exists():
@@ -953,7 +1031,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
                 "Giọng Trầm Kể Chuyện (vi-VN)": "vi-VN-NamMinhNeural",
                 "Chị Google": "vi-VN-HoaiMyNeural",
             }
-            v_code = voice_code_map.get(voice, "vi-VN-HoaiMyNeural")
+            v_code = voice if str(voice).endswith("Neural") else voice_code_map.get(voice, "vi-VN-HoaiMyNeural")
             import hashlib
             h = hashlib.md5(f"{text}_{v_code}_{speed}".encode('utf-8')).hexdigest()
             cache_dir = BASE_DIR / "python-worker" / "temp" / "preview_cache"

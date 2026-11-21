@@ -31,6 +31,8 @@ import {
   apiOpenFile,
   apiUploadVideoFile,
   apiAddLocalPath,
+  apiGetVoices,
+  type VoiceOption,
   listenTauriEvent
 } from '../services/tauriBridge';
 
@@ -85,8 +87,13 @@ interface StudioState {
   // Characters & Multi-Speaker Mapping
   characters: CharacterMapping[];
 
+  // Dynamic Voices (queried live from Edge-TTS & config/voices.json)
+  freeVoices: VoiceOption[];
+  proVoices: VoiceOption[];
+
   // Actions
   initApp: () => Promise<void>;
+  refreshVoices: () => Promise<void>;
   setActiveTopTab: (tab: TopTab) => void;
   setStudioMode: (mode: StudioMode) => void;
   setCurrentProfile: (profile: string) => void;
@@ -233,7 +240,23 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     },
   ],
 
+  freeVoices: [],
+  proVoices: [],
+
+  refreshVoices: async () => {
+    const data = await apiGetVoices();
+    if (data) {
+      set({
+        freeVoices: data.free_voices || [],
+        proVoices: data.pro_voices || [],
+      });
+    }
+  },
+
   initApp: async () => {
+    // 0. Load live voices dynamically from Edge-TTS & config/voices.json
+    get().refreshVoices();
+
     // 1. Load profiles from backend
     const profiles = await apiLoadProfiles();
     if (profiles && profiles.length > 0) {

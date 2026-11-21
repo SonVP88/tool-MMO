@@ -10,14 +10,14 @@ import {
 import { useStudioStore } from '../store/useStudioStore';
 
 export const AudioNovelTab: React.FC = () => {
-  const { addLog, outputDir, setStudioMode } = useStudioStore();
+  const { addLog, outputDir, setStudioMode, freeVoices } = useStudioStore();
 
   const [storyText, setStoryText] = useState('');
 
   const [bgmVolume, setBgmVolume] = useState(12);
   const [bgmTrack, setBgmTrack] = useState('Nhạc Cổ Phong Du Dương (Dịu nhẹ)');
   const [bgVideo, setBgVideo] = useState('Video Phong Cảnh Anime 4K (Loop)');
-  const [voice, setVoice] = useState('Nam Miền Bắc Trầm Ấm (vi-VN)');
+  const [voice, setVoice] = useState('');
   const [speed, setSpeed] = useState(1.10);
   const [isProducing, setIsProducing] = useState(false);
 
@@ -156,14 +156,19 @@ export const AudioNovelTab: React.FC = () => {
             <div>
               <label className="text-slate-400 text-[11px] font-semibold block mb-1">Chọn giọng đọc truyền cảm:</label>
               <select
-                value={voice}
+                value={voice || (freeVoices[0]?.value ?? '')}
                 onChange={(e) => setVoice(e.target.value)}
                 className="w-full bg-[#0a0f16] border border-[#233145] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
               >
-                <option value="Nam Miền Bắc Trầm Ấm (vi-VN)">Nam Miền Bắc Trầm Ấm (vi-VN)</option>
-                <option value="Nam Miền Nam Truyền Cảm (vi-VN)">Nam Miền Nam Truyền Cảm (vi-VN)</option>
-                <option value="Cô Gái Hoạt Ngôn (vi-VN)">Cô Gái Hoạt Ngôn (vi-VN)</option>
-                <option value="Nữ Nhẹ Nhàng (vi-VN)">Nữ Nhẹ Nhàng (vi-VN)</option>
+                {freeVoices.length === 0 ? (
+                  <option value="">Đang tải giọng đọc...</option>
+                ) : (
+                  freeVoices.map((v) => (
+                    <option key={v.value} value={v.value}>
+                      {v.label}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 

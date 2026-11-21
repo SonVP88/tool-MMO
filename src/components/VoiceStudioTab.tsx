@@ -18,7 +18,7 @@ import { useStudioStore } from '../store/useStudioStore';
 import type { SubtitleLine } from '../types';
 
 export const VoiceStudioTab: React.FC = () => {
-  const { tasks, currentVideoId, setCurrentVideoId, outputDir, addLog } = useStudioStore();
+  const { tasks, currentVideoId, setCurrentVideoId, outputDir, addLog, freeVoices } = useStudioStore();
   
   const currentTask = tasks.find((t) => t.id === currentVideoId) || tasks[0];
 
@@ -448,15 +448,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   </td>
                   <td className="py-2.5 px-2">
                     <select
-                      value={sub.speaker || 'Cô Gái Hoạt Ngôn (vi-VN)'}
+                      value={sub.speaker || (freeVoices[0]?.value ?? '')}
                       onChange={(e) => handleSpeakerChange(sub.index, e.target.value)}
                       className="w-full bg-[#0d131c] border border-[#233145] rounded-md px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-sky-500 font-medium"
                     >
-                      <option value="Cô Gái Hoạt Ngôn (vi-VN)">Cô Gái Hoạt Ngôn (Hoài My - Nữ)</option>
-                      <option value="Nam Miền Bắc Trầm Ấm (vi-VN)">Nam Miền Bắc (Nam Minh - Nam)</option>
-                      <option value="Nam Miền Nam Truyền Cảm (vi-VN)">Nam Miền Nam (Truyền Cảm)</option>
-                      <option value="Nữ Nhẹ Nhàng (vi-VN)">Nữ Nhẹ Nhàng (Hoài My)</option>
-                      <option value="Giọng Trầm Kể Chuyện (vi-VN)">Giọng Trầm Kể Chuyện (Nam)</option>
+                      {freeVoices.length === 0 ? (
+                        <option value="">Đang tải giọng...</option>
+                      ) : (
+                        freeVoices.map((v) => (
+                          <option key={v.value} value={v.value}>
+                            {v.label}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </td>
                   <td className="py-2.5 px-2 text-center">
