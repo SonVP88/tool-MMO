@@ -163,7 +163,7 @@ export const ControlPanel: React.FC = () => {
         <button
           onClick={handleOpenExportFolder}
           className="py-1.5 px-2 rounded-lg text-xs font-semibold bg-[#1b2535] hover:bg-[#243349] text-slate-200 border border-[#2b3a50] flex items-center justify-center gap-1.5 transition-all shadow-sm"
-          title={`Mở thư mục: ${outputDir || 'C:\\Output'}`}
+          title={outputDir ? `Mở thư mục xuất: ${outputDir}` : 'Mở thư mục xuất video'}
         >
           <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
           📁 Mở Thư Mục

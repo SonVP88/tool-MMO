@@ -832,16 +832,18 @@ def step_render_video(
 
     srt_path = temp_dir / f"subtitles_{task_id}.srt"
 
-    # Convert settings to styling
-    font_size = int(settings.get('fontSize', 25))
+    # Detect actual video dimensions dynamically
+    vid_w, vid_h = get_video_dimensions(raw_video)
+
+    # Convert settings to styling scaled proportionally to video resolution
+    base_font_size = int(settings.get('fontSize', 25))
+    font_size = max(12, int(base_font_size * (vid_h / 720.0)))
     text_color_ass = hex_to_ass_color(settings.get('textColor', '#f59e0b'), "&H000BB7F5&")
     stroke_color_ass = hex_to_ass_color(settings.get('strokeColor', '#000000'), "&H00000000&")
 
-    # MarginV based on new_sub_box Y percentage
+    # MarginV dynamically calculated from actual video height and new_sub_box Y percentage
     box_y = float(new_sub_box.get('y', 78))
-    margin_v = int(720 * (1.0 - (box_y / 100.0)) - 30)
-    if margin_v < 10:
-        margin_v = 30
+    margin_v = max(10, int(vid_h * (1.0 - (box_y / 100.0)) - (vid_h * 0.04)))
 
     # Write SRT file
     def sec_to_srt(s):
@@ -867,7 +869,6 @@ def step_render_video(
     emit_progress(task_id, 88, "Render video", f"[FFmpeg] Che sub cũ, burn sub và xử lý âm thanh: {cur_filter_label}...")
 
     # Boxblur parameters from old_sub_box using ACTUAL video dimensions (ensures valid coordinates on all resolutions)
-    vid_w, vid_h = get_video_dimensions(raw_video)
     bx = max(0, int(float(old_sub_box.get('x', 18)) / 100.0 * vid_w))
     by = max(0, int(float(old_sub_box.get('y', 72)) / 100.0 * vid_h))
     bw = max(20, int(float(old_sub_box.get('width', 32)) / 100.0 * vid_w))
@@ -1049,18 +1050,28 @@ def step_produce_audio_novel(
     if m:
         total_sec = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) + 1.0
 
-    emit_progress(task_id, 65, "Tạo BGM & Background", f"Trộn nhạc nền du dương ({int(total_sec)}s) và thiết kế khung hình 1080p...")
+def get_system_font_path() -> str:
+    windir = os.environ.get("WINDIR", "C:\\Windows")
+    for fname in ["arial.ttf", "segoeui.ttf", "tahoma.ttf", "consola.ttf"]:
+        p = Path(windir) / "Fonts" / fname
+        if p.exists():
+            return str(p).replace("\\", "/").replace(":", "\\:")
+    return ""
+
+    emit_progress(task_id, 65, "Tạo BGM & Background", f"Trộn nhạc nền du dương ({int(total_sec)}s) và thiết kế khung hình...")
 
     enc_name, enc_flags, enc_label = detect_gpu_encoder(ffmpeg_exe)
     safe_title = title.replace("'", "").replace(":", "")[:35]
+    sys_font = get_system_font_path()
+    font_filter = f"fontfile='{sys_font}':" if sys_font else ""
 
     cmd_render = [
         ffmpeg_exe, "-y",
         "-f", "lavfi", "-i", f"color=c=#0b1120:s=1280x720:d={total_sec:.2f}",
         "-i", str(voice_mp3),
         "-filter_complex", (
-            f"[0:v]drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='{safe_title}':fontsize=42:fontcolor=#f59e0b:x=(w-text_w)/2:y=200,"
-            f"drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='SẢN XUẤT TRUYỆN AUDIO & PODCAST AI':fontsize=20:fontcolor=#94a3b8:x=(w-text_w)/2:y=265[vout];"
+            f"[0:v]drawtext={font_filter}text='{safe_title}':fontsize=42:fontcolor=#f59e0b:x=(w-text_w)/2:y=200,"
+            f"drawtext={font_filter}text='SẢN XUẤT TRUYỆN AUDIO & PODCAST AI':fontsize=20:fontcolor=#94a3b8:x=(w-text_w)/2:y=265[vout];"
             f"aevalsrc=sin(220*2*PI*t)*0.012+sin(330*2*PI*t)*0.008:d={total_sec:.2f}[bgm];"
             f"[bgm]volume={bgm_vol}[bgm_low];"
             f"[bgm_low][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]"
@@ -1081,7 +1092,7 @@ def step_produce_audio_novel(
             "-f", "lavfi", "-i", f"color=c=#0b1120:s=1280x720:d={total_sec:.2f}",
             "-i", str(voice_mp3),
             "-filter_complex", (
-                f"[0:v]drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='{safe_title}':fontsize=38:fontcolor=#f59e0b:x=(w-text_w)/2:y=200[vout];"
+                f"[0:v]drawtext={font_filter}text='{safe_title}':fontsize=38:fontcolor=#f59e0b:x=(w-text_w)/2:y=200[vout];"
                 f"[1:a]volume=1.0[aout]"
             ),
             "-map", "[vout]",
@@ -1100,7 +1111,7 @@ def main():
     parser = argparse.ArgumentParser(description="MMO Studio Video Pipeline")
     parser.add_argument("--task-id", type=int, required=True)
     parser.add_argument("--source", type=str, required=True)
-    parser.add_argument("--output-dir", type=str, default="C:\\Output")
+    parser.add_argument("--output-dir", type=str, default=str(BASE_DIR / "output"))
     parser.add_argument("--config", type=str, default="{}")
     args = parser.parse_args()
 

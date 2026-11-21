@@ -30,6 +30,27 @@ TASKS_FILE = CONFIG_DIR / "tasks.json"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 PROFILES_FILE = CONFIG_DIR / "profiles.json"
 
+def get_default_output_dir() -> Path:
+    """
+    Dynamically resolves output directory without hardcoding any OS drive or machine path.
+    1. Reads user-configured output_dir from config/settings.json (if present)
+    2. Falls back to portable project-relative 'output' directory (zero root-permission requirement)
+    """
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                s = json.load(f)
+                val = str(s.get("output_dir", s.get("outputDir", "") or "")).strip()
+                if val:
+                    p = Path(os.path.expandvars(os.path.expanduser(val))).resolve()
+                    p.mkdir(parents=True, exist_ok=True)
+                    return p
+        except Exception:
+            pass
+    p = BASE_DIR / "output"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
 # State
 active_tasks = []
 task_lock = threading.Lock()
@@ -104,14 +125,7 @@ def worker_thread_loop():
 
         task_id = task_to_run["id"]
         source = task_to_run.get("source", task_to_run.get("name", ""))
-        output_dir = "C:\\Output"
-        if SETTINGS_FILE.exists():
-            try:
-                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                    s = json.load(f)
-                    output_dir = s.get("output_dir", s.get("outputDir", output_dir))
-            except Exception:
-                pass
+        output_dir = str(get_default_output_dir())
 
         # Prepare config JSON
         cfg = {}
@@ -510,7 +524,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
                 "progress": 0,
                 "status": "WAITING",
                 "note": f"Đã nhập video: {file_mb} MB",
-                "outputPath": f"C:\\Output\\Reup_{name}.mp4",
+                "outputPath": str(get_default_output_dir() / f"Reup_{name}.mp4"),
                 "selected": False
             }
             with task_lock:
@@ -627,7 +641,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
                             "progress": 0,
                             "status": "WAITING",
                             "note": f"File nội bộ ({file_mb} MB)",
-                            "outputPath": f"C:\\Output\\Reup_{name}.mp4",
+                            "outputPath": str(get_default_output_dir() / f"Reup_{name}.mp4"),
                             "selected": False
                         }
                         active_tasks.append(new_item)
@@ -664,7 +678,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
                                     "progress": 0,
                                     "status": "WAITING",
                                     "note": f"Từ thư mục {p.name}",
-                                    "outputPath": f"C:\\Output\\Reup_{name}.mp4",
+                                    "outputPath": str(get_default_output_dir() / f"Reup_{name}.mp4"),
                                     "selected": False
                                 }
                                 active_tasks.append(new_item)
@@ -687,7 +701,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
                         "progress": 0,
                         "status": "WAITING",
                         "note": "Đã thêm vào hàng đợi thực",
-                        "outputPath": f"C:\\Output\\Reup_{name}.mp4",
+                        "outputPath": str(get_default_output_dir() / f"Reup_{name}.mp4"),
                         "selected": False
                     }
                     active_tasks.append(new_item)
@@ -800,7 +814,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
             return
 
         if path == "/api/open_folder":
-            p = req_data.get("path", "C:\\Output")
+            p = req_data.get("path") or str(get_default_output_dir())
             Path(p).mkdir(parents=True, exist_ok=True)
             if sys.platform == "win32":
                 subprocess.Popen(["explorer", p])
@@ -883,7 +897,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
             bgm_track = req_data.get("bgmTrack", "Nhạc Cổ Phong")
             bgm_volume = int(req_data.get("bgmVolume", 12))
             bg_video = req_data.get("bgVideo", "Video Phong Cảnh Anime 4K (Loop)")
-            output_dir = req_data.get("outputDir", "C:\\Output")
+            output_dir = req_data.get("outputDir") or str(get_default_output_dir())
 
             base_id = int(time.time() * 1000)
             novels_dir = BASE_DIR / "python-worker" / "temp" / "novels"
@@ -901,7 +915,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
                 "progress": 0,
                 "status": "WAITING",
                 "note": f"Truyện Audio: {voice}",
-                "outputPath": f"{output_dir}\\Audio_{clean_name}.mp4",
+                "outputPath": str(Path(output_dir) / f"Audio_{clean_name}.mp4"),
                 "selected": False,
                 "extra_config": {
                     "voice": voice,
@@ -939,7 +953,7 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
 
         if path == "/api/merge_full_audio":
             task_id = req_data.get("task_id")
-            output_dir = Path(req_data.get("output_dir", "C:\\Output"))
+            output_dir = Path(req_data.get("output_dir") or get_default_output_dir())
             output_dir.mkdir(parents=True, exist_ok=True)
             task_dir = BASE_DIR / "python-worker" / "temp" / f"task_{task_id}"
             

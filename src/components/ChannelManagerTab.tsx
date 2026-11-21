@@ -34,7 +34,7 @@ export const ChannelManagerTab: React.FC = () => {
 
   const handleAddChannel = () => {
     if (!newName.trim()) return;
-    const baseOutput = outputDir || 'C:\\Output';
+    const baseOutput = outputDir || 'output';
     const item: ChannelItem = {
       id: Date.now().toString(),
       name: newName.trim(),

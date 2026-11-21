@@ -109,9 +109,9 @@ export const BatchSettingsForm: React.FC = () => {
         <div className="flex items-center gap-1.5">
           <input
             type="text"
-            value={outputDir || 'C:\\Output'}
+            value={outputDir}
             onChange={(e) => setOutputDir(e.target.value)}
-            placeholder="Ví dụ: D:\Output hoặc E:\Videos"
+            placeholder="Mặc định: thư mục output của tool (hoặc D:\Videos, E:\Output...)"
             className="flex-1 bg-[#151d2a] border border-[#2e405a] rounded px-2.5 py-1 text-xs text-sky-200 font-mono focus:outline-none focus:border-sky-500"
           />
           <button
@@ -136,9 +136,9 @@ export const BatchSettingsForm: React.FC = () => {
         {/* Quick Drive Selector Pills */}
         <div className="flex items-center gap-1.5 pt-0.5 text-[10px]">
           <span className="text-slate-500">Chuyển nhanh:</span>
-          {['C:\\Output', 'D:\\Output', 'E:\\Output'].map((path) => (
+          {['', 'D:\\Output', 'E:\\Output'].map((path) => (
             <button
-              key={path}
+              key={path || 'default'}
               type="button"
               onClick={() => setOutputDir(path)}
               className={`px-1.5 py-0.5 rounded font-mono border transition-colors cursor-pointer ${
@@ -147,11 +147,11 @@ export const BatchSettingsForm: React.FC = () => {
                   : 'bg-[#151d2a] border-[#293a50] text-slate-400 hover:text-slate-200'
               }`}
             >
-              {path}
+              {path || 'Mặc định (output)'}
             </button>
           ))}
           <span className="text-slate-500 italic ml-auto text-[9px]">
-            *Thoải mái đổi sang ổ D, E để tránh đầy ổ C
+            *Thoải mái đổi sang ổ D, E để tránh đầy ổ hệ thống
           </span>
         </div>
       </div>

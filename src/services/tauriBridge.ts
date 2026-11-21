@@ -137,7 +137,7 @@ export async function invokeCommand<T>(cmd: string, args: Record<string, any> = 
       await fetch(`${BRIDGE_URL}/api/open_folder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: args.path || 'C:\\Output' }),
+        body: JSON.stringify({ path: args.path || '' }),
       });
       return null;
     }

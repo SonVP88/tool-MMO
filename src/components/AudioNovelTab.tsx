@@ -61,7 +61,7 @@ export const AudioNovelTab: React.FC = () => {
           bgmVolume: bgmVolume,
           bgmTrack: bgmTrack,
           bgVideo: bgVideo,
-          outputDir: outputDir || 'C:\\Output',
+          outputDir: outputDir || '',
         }),
       });
       const data = await res.json();

@@ -248,7 +248,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           task_id: currentTask.id,
-          output_dir: outputDir || 'C:\\Output',
+          output_dir: outputDir || '',
         }),
       });
       const data = await res.json();

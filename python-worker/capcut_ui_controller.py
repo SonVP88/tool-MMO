@@ -455,7 +455,7 @@ def run_native_capcut_pro_pipeline(
     2. Visual adjustments (Canvas, blur mask over old sub)
     3. Auto Subtitles & Translation
     4. Text-To-Speech with duration sync
-    5. Automatic Export (Ctrl + E) to C:\\Output
+    5. Automatic Export (Ctrl + E) to Output folder
     """
     is_pro = (account_type.upper() == "PRO")
     mode_label = "CapCut Pro VIP" if is_pro else "CapCut Thường (Free)"

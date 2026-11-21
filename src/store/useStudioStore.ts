@@ -135,12 +135,12 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   studioMode: 'REUP',
   profiles: ['Mặc định', 'Truyện Đô Thị Fast', 'Reup Review Douyin', 'Shorts Anime & Manhua'],
   currentProfile: 'Mặc định',
-  autoSaveTime: '11:31:09',
+  autoSaveTime: new Date().toLocaleTimeString('vi-VN', { hour12: false }),
 
   geminiApiKey: '',
   groqApiKey: '',
   douyinCookie: '',
-  outputDir: 'C:\\Output',
+  outputDir: '',
 
   isAddVideoModalOpen: false,
   isCookieModalOpen: false,
@@ -451,7 +451,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         progress: 0,
         status: 'WAITING',
         note: 'Vừa thêm vào hàng đợi thực',
-        outputPath: `C:\\Output\\Reup_${item.split(/[\/\\]/).pop() || 'Video'}.mp4`,
+        outputPath: `${get().outputDir ? `${get().outputDir}/` : ''}Reup_${item.split(/[\/\\]/).pop() || 'Video'}.mp4`,
         selected: false,
       }));
       set((state) => ({
@@ -577,7 +577,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   },
 
   openFolder: (path) => {
-    const target = path || get().outputDir || 'C:\\Output';
+    const target = path || get().outputDir || '';
     apiOpenOutputFolder(target);
     get().addLog(`Đang mở thư mục xuất: ${target}`, 'info');
   },
