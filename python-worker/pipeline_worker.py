@@ -75,16 +75,15 @@ def get_ffmpeg_path():
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception:
         pass
-    # 3. Common paths
-    candidates = [
-        r"C:\ffmpeg\bin\ffmpeg.exe",
-        r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
-        r"D:\ffmpeg\bin\ffmpeg.exe",
-        os.path.expanduser(r"~\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe"),
-    ]
-    for c in candidates:
-        if os.path.isfile(c):
-            return c
+    # 3. Environment paths
+    for base in [os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", "")]:
+        if base:
+            c = Path(base) / "ffmpeg" / "bin" / "ffmpeg.exe"
+            if c.exists():
+                return str(c)
+    winget = Path(os.path.expanduser(r"~\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe"))
+    if winget.exists():
+        return str(winget)
     return "ffmpeg"
 
 def detect_gpu_encoder(ffmpeg_exe: str):

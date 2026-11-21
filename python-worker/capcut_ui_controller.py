@@ -69,14 +69,16 @@ def get_capcut_exe_path(custom_path: str = None) -> str:
         return custom_path
 
     local_appdata = os.environ.get("LOCALAPPDATA", "")
+    pf = os.environ.get("ProgramFiles", "")
+    pf_x86 = os.environ.get("ProgramFiles(x86)", "")
     candidates = [
         os.path.join(local_appdata, "CapCut", "Apps", "CapCut.exe"),
         os.path.join(local_appdata, "JianyingPro", "Apps", "JianyingPro.exe"),
-        r"C:\Program Files\CapCut\CapCut.exe",
-        r"D:\Program Files\CapCut\CapCut.exe",
+        os.path.join(pf, "CapCut", "CapCut.exe") if pf else "",
+        os.path.join(pf_x86, "CapCut", "CapCut.exe") if pf_x86 else "",
     ]
     for c in candidates:
-        if os.path.isfile(c):
+        if c and os.path.isfile(c):
             return c
     return "CapCut.exe"
 

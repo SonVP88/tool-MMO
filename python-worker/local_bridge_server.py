@@ -202,6 +202,7 @@ def worker_thread_loop():
         ]
 
         emit_live_log(f"[Video #{task_id}] Đang xử lý: {source}", "info")
+        task_start_time = time.time()
 
         try:
             # CREATE_NO_WINDOW on Windows
@@ -251,6 +252,22 @@ def worker_thread_loop():
                                     t["status"] = "ERROR"
                                 break
 
+                    # Dynamic estimated time calculation
+                    elapsed = max(0.1, time.time() - task_start_time)
+                    if 5 < progress < 100:
+                        total_est = (elapsed / progress) * 100
+                        rem_sec = max(1, int(total_est - elapsed))
+                        if rem_sec >= 3600:
+                            est_str = f"{rem_sec // 3600}h {(rem_sec % 3600) // 60}m"
+                        elif rem_sec >= 60:
+                            est_str = f"{rem_sec // 60}m {rem_sec % 60}s"
+                        else:
+                            est_str = f"{rem_sec}s"
+                    elif progress >= 100 or evt_type == "done":
+                        est_str = "Hoàn tất"
+                    else:
+                        est_str = "Đang ước tính..."
+
                     # Broadcast progress
                     broadcast_event("task-progress", {
                         "task_id": task_id,
@@ -262,7 +279,7 @@ def worker_thread_loop():
                         "global_processed": sum(1 for x in active_tasks if x.get("status") == "DONE"),
                         "global_total": len(active_tasks),
                         "global_percent": round(sum(x.get("progress", 0) for x in active_tasks) / max(1, len(active_tasks)), 1),
-                        "estimated_time": "1m 30s"
+                        "estimated_time": est_str
                     })
 
                     if msg:
