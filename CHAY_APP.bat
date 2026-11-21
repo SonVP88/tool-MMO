@@ -9,15 +9,32 @@ echo.
 cd /d "%~dp0"
 if exist "tool-MMO\python-worker" cd tool-MMO
 
-REM 1. Tim kiem trinh thuc thi Python
+REM 1. Tim kiem trinh thuc thi Python hop le
 set "PYTHON_EXE="
-where python >nul 2>nul
+python --version >nul 2>nul
 if not errorlevel 1 (
     set "PYTHON_EXE=python"
 ) else (
-    where py >nul 2>nul
+    py -3 --version >nul 2>nul
     if not errorlevel 1 (
-        set "PYTHON_EXE=py"
+        set "PYTHON_EXE=py -3"
+    ) else (
+        py --version >nul 2>nul
+        if not errorlevel 1 (
+            set "PYTHON_EXE=py"
+        )
+    )
+)
+
+REM Tim kiem trong thu muc cai dat thong dung neu chua co trong PATH
+if "%PYTHON_EXE%"=="" (
+    for /d %%P in ("%LocalAppData%\Programs\Python\Python*") do (
+        if exist "%%P\python.exe" set "PYTHON_EXE=%%P\python.exe"
+    )
+)
+if "%PYTHON_EXE%"=="" (
+    for /d %%P in ("C:\Python*") do (
+        if exist "%%P\python.exe" set "PYTHON_EXE=%%P\python.exe"
     )
 )
 
@@ -30,26 +47,34 @@ if "%PYTHON_EXE%"=="" (
     exit /b 1
 )
 
-REM 2. Kiem tra xem dist co ton tai khong, neu chua co thi tu dong build
+REM 2. Tu dong kiem tra va cai dat thu vien Python can thiet neu may moi chua co
+%PYTHON_EXE% -c "import requests, edge_tts, yt_dlp" >nul 2>nul
+if errorlevel 1 (
+    echo [*] Phat hien thieu mot so thu vien AI, dang tu dong cai dat nhanh...
+    %PYTHON_EXE% -m pip install -r python-worker\requirements.txt
+    echo.
+)
+
+REM 3. Kiem tra thu muc giao dien dist (da duoc dong goi san trong repo)
 if not exist "dist\index.html" (
-    echo [*] Phat hien chua co thu muc giao dien dist, dang tu dong khoi tao...
+    echo [*] Dang tao giao dien ung dung...
     where npm >nul 2>nul
     if not errorlevel 1 (
         call npm run build
     )
 )
 
-REM 3. Kiem tra va khoi dong Python Bridge Server & UI (Port 5678)
-echo [*] Dang kiem tra may chu Pipeline & Giao dien (Port 5678)...
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5678/api/tasks' -TimeoutSec 1 -UseBasicParsing; exit 0 } catch { exit 1 }"
+REM 4. Kiem tra may chu Port 5678, giai phong port neu bi process cu treo
+echo [*] Dang kiem tra may chu Backend & Pipeline (Port 5678)...
+powershell -NoProfile -Command "$alive = $false; try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5678/api/tasks' -TimeoutSec 1 -UseBasicParsing; if ($r.StatusCode -eq 200) { $alive = $true } } catch {}; if (-not $alive) { Get-NetTCPConnection -LocalPort 5678 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; exit 1 } else { exit 0 }"
 if errorlevel 1 (
     echo [*] Dang khoi dong may chu Backend & Giao dien ung dung...
-    start /min cmd /c "%PYTHON_EXE% python-worker/local_bridge_server.py > python-worker\server.log 2>&1"
+    start /min "" cmd /c "%PYTHON_EXE% python-worker\local_bridge_server.py > python-worker\server.log 2>&1"
 )
 
-REM 4. Cho may chu phan hoi HTTP 200 OK
+REM 5. Cho may chu phan hoi HTTP 200 OK
 echo [*] Dang dong bo ket noi he thong...
-powershell -NoProfile -Command "for ($i=0; $i -lt 30; $i++) { try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5678/' -TimeoutSec 1 -UseBasicParsing; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Milliseconds 400 }; exit 1"
+powershell -NoProfile -Command "for ($i=0; $i -lt 35; $i++) { try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5678/' -TimeoutSec 1 -UseBasicParsing; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Milliseconds 400 }; exit 1"
 if errorlevel 1 (
     echo [!] Khong the ket noi toi may chu tai http://127.0.0.1:5678
     echo [*] Nhat ky loi tu server:
@@ -59,7 +84,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM 5. Tim kiem Microsoft Edge hoac mo trinh duyet mac dinh
+REM 6. Tim kiem Microsoft Edge hoac mo trinh duyet mac dinh
 set "EDGE_EXE="
 if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" set "EDGE_EXE=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
 if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" set "EDGE_EXE=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"

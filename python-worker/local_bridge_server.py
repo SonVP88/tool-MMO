@@ -991,11 +991,18 @@ def parse_srt_to_list(srt_path):
                 pass
     return subs
 
+class ReusableThreadingServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
 def run_server():
     load_initial_tasks()
-    server = ThreadingHTTPServer(('127.0.0.1', PORT), StudioAPIHandler)
+    server = ReusableThreadingServer(('127.0.0.1', PORT), StudioAPIHandler)
     print(f"[*] Studio MMO Local Bridge Server running on http://127.0.0.1:{PORT}", flush=True)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.server_close()
 
 if __name__ == "__main__":
     run_server()
