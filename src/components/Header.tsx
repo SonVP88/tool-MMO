@@ -211,7 +211,10 @@ export const Header: React.FC = () => {
             }`}
           >
             <Key className="w-3.5 h-3.5" />
-            {geminiApiKey ? '🔑 API Dịch (Đã có)' : '🔑 NHẬP API KEY'}
+            {(() => {
+              const gCount = (geminiApiKey || '').split(/[\r\n,;]+/).map(k => k.trim()).filter(k => k.length > 10).length;
+              return gCount > 1 ? `🔑 API Dịch (${gCount} Keys)` : gCount === 1 ? '🔑 API Dịch (Đã có)' : '🔑 NHẬP API KEY';
+            })()}
           </button>
 
           {/* Manage Profiles Button */}

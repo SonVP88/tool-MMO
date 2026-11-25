@@ -722,69 +722,105 @@ code{background:#0a0f16;color:#34d399;padding:3px 8px;border-radius:6px;font-fam
 
         if path == "/api/test_api_key":
             key_type = req_data.get("type", "gemini")
-            api_key = req_data.get("key", "").strip()
+            raw_key = req_data.get("key", "").strip()
 
-            if not api_key:
+            if not raw_key:
                 self.send_json({"valid": False, "message": "Vui lòng nhập khóa API trước khi kiểm tra."}, 400)
                 return
 
             import urllib.request
             import urllib.error
+            import re
             browser_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+            items = [k.strip().strip('"\'') for k in re.split(r'[\r\n,;]+', raw_key) if k.strip()]
+            valid_keys = [k for k in items if len(k) > 10 and not k.startswith("AIzaSyD-mock") and not k.startswith("gsk_mock")]
+
+            if not valid_keys:
+                self.send_json({"valid": False, "message": "Không tìm thấy khóa API hợp lệ (chuỗi quá ngắn hoặc không đúng định dạng)."}, 400)
+                return
+
+            results = []
             if key_type == "gemini":
-                try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                    req_payload = json.dumps({"contents": [{"parts": [{"text": "ping"}]}]}).encode('utf-8')
-                    headers = {"Content-Type": "application/json", "User-Agent": browser_ua}
-                    req = urllib.request.Request(url, data=req_payload, headers=headers, method="POST")
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        if resp.status == 200:
-                            emit_live_log("✔ Kiểm tra Gemini 2.5 Flash API Key: Kết nối thành công!", "success")
-                            self.send_json({"valid": True, "model": "gemini-2.5-flash", "message": "Kết nối Gemini 2.5 Flash thành công!"})
-                            return
-                except urllib.error.HTTPError as e:
-                    body = e.read().decode('utf-8', errors='ignore')
-                    err_msg = f"HTTP {e.code}"
+                for k in valid_keys:
+                    masked = f"{k[:6]}...{k[-4:]}" if len(k) >= 12 else "****"
                     try:
-                        err_json = json.loads(body)
-                        if "error" in err_json and "message" in err_json["error"]:
-                            err_msg = err_json["error"]["message"]
-                    except Exception:
-                        pass
-                    emit_live_log(f"✖ Kiểm tra Gemini API Key thất bại: {err_msg}", "error")
-                    self.send_json({"valid": False, "message": f"Lỗi Gemini: {err_msg}"}, 400)
-                    return
-                except Exception as e:
-                    emit_live_log(f"✖ Kiểm tra Gemini API Key thất bại: {e}", "error")
-                    self.send_json({"valid": False, "message": f"Lỗi Gemini: {str(e)[:120]}"}, 400)
-                    return
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={k}"
+                        req_payload = json.dumps({"contents": [{"parts": [{"text": "ping"}]}]}).encode('utf-8')
+                        headers = {"Content-Type": "application/json", "User-Agent": browser_ua}
+                        req = urllib.request.Request(url, data=req_payload, headers=headers, method="POST")
+                        with urllib.request.urlopen(req, timeout=10) as resp:
+                            if resp.status == 200:
+                                results.append({"key": masked, "valid": True, "msg": "Hoạt động tốt"})
+                    except urllib.error.HTTPError as e:
+                        body = e.read().decode('utf-8', errors='ignore')
+                        err_msg = f"HTTP {e.code}"
+                        try:
+                            err_json = json.loads(body)
+                            if "error" in err_json and "message" in err_json["error"]:
+                                err_msg = err_json["error"]["message"]
+                        except Exception:
+                            pass
+                        results.append({"key": masked, "valid": False, "msg": err_msg})
+                    except Exception as e:
+                        results.append({"key": masked, "valid": False, "msg": str(e)[:60]})
+
+                active_count = sum(1 for r in results if r["valid"])
+                total_count = len(results)
+                if active_count == total_count:
+                    summary_msg = f"✔ Cả {total_count}/{total_count} Gemini Keys đều hoạt động xuất sắc! Tự động chia tải Round-Robin & Chống Limit 429." if total_count > 1 else "✔ Kết nối Gemini 2.5 Flash thành công!"
+                    emit_live_log(summary_msg, "success")
+                    self.send_json({"valid": True, "total": total_count, "active": active_count, "model": "gemini-2.5-flash", "message": summary_msg, "details": results})
+                elif active_count > 0:
+                    summary_msg = f"✔ {active_count}/{total_count} Gemini Keys hoạt động tốt ({total_count - active_count} keys lỗi/chạm limit). Tool vẫn chia tải qua {active_count} keys tốt!"
+                    emit_live_log(summary_msg, "warning")
+                    self.send_json({"valid": True, "total": total_count, "active": active_count, "model": "gemini-2.5-flash", "message": summary_msg, "details": results})
+                else:
+                    first_err = results[0]["msg"] if results else "Lỗi kết nối"
+                    summary_msg = f"✖ Toàn bộ {total_count} Gemini Keys đều không kết nối được: {first_err}"
+                    emit_live_log(summary_msg, "error")
+                    self.send_json({"valid": False, "total": total_count, "active": 0, "message": summary_msg, "details": results}, 400)
+                return
+
             elif key_type == "groq":
-                try:
-                    url = "https://api.groq.com/openai/v1/models"
-                    headers = {"Authorization": f"Bearer {api_key}", "User-Agent": browser_ua}
-                    req = urllib.request.Request(url, headers=headers, method="GET")
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        if resp.status == 200:
-                            emit_live_log("✔ Kiểm tra Groq Whisper API Key: Kết nối thành công!", "success")
-                            self.send_json({"valid": True, "model": "whisper-large-v3", "message": "Kết nối Groq Whisper thành công!"})
-                            return
-                except urllib.error.HTTPError as e:
-                    body = e.read().decode('utf-8', errors='ignore')
-                    err_msg = f"HTTP {e.code}"
+                for k in valid_keys:
+                    masked = f"{k[:6]}...{k[-4:]}" if len(k) >= 12 else "****"
                     try:
-                        err_json = json.loads(body)
-                        if "error" in err_json and "message" in err_json["error"]:
-                            err_msg = err_json["error"]["message"]
-                    except Exception:
-                        pass
-                    emit_live_log(f"✖ Kiểm tra Groq API Key thất bại: {err_msg}", "error")
-                    self.send_json({"valid": False, "message": f"Lỗi Groq: {err_msg}"}, 400)
-                    return
-                except Exception as e:
-                    emit_live_log(f"✖ Kiểm tra Groq API Key thất bại: {e}", "error")
-                    self.send_json({"valid": False, "message": f"Lỗi Groq: {str(e)[:120]}"}, 400)
-                    return
+                        url = "https://api.groq.com/openai/v1/models"
+                        headers = {"Authorization": f"Bearer {k}", "User-Agent": browser_ua}
+                        req = urllib.request.Request(url, headers=headers, method="GET")
+                        with urllib.request.urlopen(req, timeout=10) as resp:
+                            if resp.status == 200:
+                                results.append({"key": masked, "valid": True, "msg": "Hoạt động tốt"})
+                    except urllib.error.HTTPError as e:
+                        body = e.read().decode('utf-8', errors='ignore')
+                        err_msg = f"HTTP {e.code}"
+                        try:
+                            err_json = json.loads(body)
+                            if "error" in err_json and "message" in err_json["error"]:
+                                err_msg = err_json["error"]["message"]
+                        except Exception:
+                            pass
+                        results.append({"key": masked, "valid": False, "msg": err_msg})
+                    except Exception as e:
+                        results.append({"key": masked, "valid": False, "msg": str(e)[:60]})
+
+                active_count = sum(1 for r in results if r["valid"])
+                total_count = len(results)
+                if active_count == total_count:
+                    summary_msg = f"✔ Cả {total_count}/{total_count} Groq Keys đều hoạt động xuất sắc!" if total_count > 1 else "✔ Kết nối Groq Whisper thành công!"
+                    emit_live_log(summary_msg, "success")
+                    self.send_json({"valid": True, "total": total_count, "active": active_count, "model": "whisper-large-v3", "message": summary_msg, "details": results})
+                elif active_count > 0:
+                    summary_msg = f"✔ {active_count}/{total_count} Groq Keys hoạt động tốt."
+                    emit_live_log(summary_msg, "warning")
+                    self.send_json({"valid": True, "total": total_count, "active": active_count, "model": "whisper-large-v3", "message": summary_msg, "details": results})
+                else:
+                    first_err = results[0]["msg"] if results else "Lỗi kết nối"
+                    summary_msg = f"✖ Toàn bộ {total_count} Groq Keys đều không kết nối được: {first_err}"
+                    emit_live_log(summary_msg, "error")
+                    self.send_json({"valid": False, "total": total_count, "active": 0, "message": summary_msg, "details": results}, 400)
+                return
 
             self.send_json({"valid": False, "message": "Loại API không hỗ trợ."}, 400)
             return

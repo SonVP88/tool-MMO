@@ -64,6 +64,95 @@ def emit_error(task_id: int, message: str, stage: str = "Lỗi"):
     }
     print(json.dumps(payload, ensure_ascii=False), flush=True)
 
+# ==================== DYNAMIC API KEY ROTATOR & RATE LIMIT MITIGATION ====================
+class ApiKeyRotator:
+    """
+    Intelligent API Key Pool & Rate-Limit Rotator:
+    - Automatically parses multiple keys from comma, newline, or semicolon delimiters.
+    - Round-robin load balancing distributes request pressure evenly across all keys.
+    - On HTTP 429 (Rate Limit / Quota Exceeded), isolates the exhausted key into cooldown
+      and immediately fails over to the next healthy key without failing tasks.
+    - Built-in pacing ensures single-key setups respect Gemini's 15 RPM free tier limits.
+    """
+    def __init__(self, raw_input, service_name: str = "Gemini", default_min_interval: float = 3.0):
+        self.service_name = service_name
+        self.keys = []
+        self.min_interval = default_min_interval
+        self.last_used_time = {}
+        self.cooldown_until = {}
+        self.current_idx = 0
+        self._parse_keys(raw_input)
+
+    def _parse_keys(self, raw_input):
+        if not raw_input:
+            return
+        if isinstance(raw_input, list):
+            items = raw_input
+        else:
+            items = re.split(r'[\r\n,;]+', str(raw_input))
+        
+        seen = set()
+        for item in items:
+            k = item.strip().strip('"\'')
+            if k and len(k) > 10 and not k.startswith("AIzaSyD-mock") and not k.startswith("gsk_mock") and k not in seen:
+                seen.add(k)
+                self.keys.append(k)
+                self.last_used_time[k] = 0.0
+                self.cooldown_until[k] = 0.0
+
+    def has_keys(self) -> bool:
+        return len(self.keys) > 0
+
+    def get_total_keys(self) -> int:
+        return len(self.keys)
+
+    def get_masked_key(self, key: str) -> str:
+        if not key or len(key) < 8:
+            return "****"
+        return f"{key[:6]}...{key[-4:]}"
+
+    def get_next_key(self, emit_fn=None, task_id=None) -> str:
+        if not self.keys:
+            return ""
+
+        now = time.time()
+        n = len(self.keys)
+        
+        # 1. Round-robin through keys not currently in cooldown
+        for _ in range(n):
+            candidate = self.keys[self.current_idx]
+            self.current_idx = (self.current_idx + 1) % n
+            
+            if now >= self.cooldown_until.get(candidate, 0.0):
+                if n == 1:
+                    elapsed = now - self.last_used_time.get(candidate, 0.0)
+                    if elapsed < self.min_interval:
+                        time.sleep(self.min_interval - elapsed)
+                self.last_used_time[candidate] = time.time()
+                return candidate
+
+        # 2. If all keys are cooling down, select the one with earliest cooldown expiration
+        earliest_key = min(self.keys, key=lambda k: self.cooldown_until.get(k, 0.0))
+        wait_needed = max(0.2, self.cooldown_until.get(earliest_key, 0.0) - now)
+        if emit_fn and task_id:
+            emit_fn(task_id, None, "Chờ Quota", f"Tất cả {n} {self.service_name} keys đang chạm limit. Tạm dừng {wait_needed:.1f}s trước khi tiếp tục...")
+        time.sleep(min(wait_needed, 6.0))
+        self.cooldown_until[earliest_key] = 0.0
+        self.last_used_time[earliest_key] = time.time()
+        return earliest_key
+
+    def mark_rate_limited(self, key: str, cooldown_seconds: float = 60.0, emit_fn=None, task_id=None):
+        self.cooldown_until[key] = time.time() + cooldown_seconds
+        masked = self.get_masked_key(key)
+        if emit_fn and task_id:
+            emit_fn(task_id, None, "Chia Tải API", f"Key {masked} chạm giới hạn (429/Limit). Tạm nghỉ {int(cooldown_seconds)}s, tự động chuyển sang Key tiếp theo...")
+
+    def mark_invalid(self, key: str, emit_fn=None, task_id=None):
+        self.cooldown_until[key] = time.time() + 86400.0
+        masked = self.get_masked_key(key)
+        if emit_fn and task_id:
+            emit_fn(task_id, None, "Cảnh báo Key", f"Key {masked} không hợp lệ hoặc đã bị khóa!")
+
 def get_ffmpeg_path():
     # 1. System PATH
     ffmpeg = shutil.which("ffmpeg")
@@ -270,25 +359,42 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
     subprocess.run(cmd_mp3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 1. Try Groq Whisper large-v3 if groq_key provided
-    if groq_key and len(groq_key.strip()) > 10 and not groq_key.startswith("gsk_mock"):
-        emit_progress(task_id, 30, "Lấy phụ đề", "Bóc tách giọng nói siêu tốc qua Groq Whisper large-v3...")
+    groq_rotator = ApiKeyRotator(groq_key, service_name="Groq", default_min_interval=2.0)
+    if groq_rotator.has_keys():
+        total_groq_keys = groq_rotator.get_total_keys()
+        key_label = f"{total_groq_keys} Groq Keys xoay tua" if total_groq_keys > 1 else "Groq Whisper"
+        emit_progress(task_id, 30, "Lấy phụ đề", f"Bóc tách giọng nói siêu tốc qua {key_label} large-v3...")
         try:
             import requests, wave, math
             from concurrent.futures import ThreadPoolExecutor
 
             def transcribe_groq_file(file_path: Path):
-                headers = {"Authorization": f"Bearer {groq_key.strip()}"}
-                mime = "audio/mp3" if file_path.suffix.lower() == ".mp3" else "audio/wav"
-                with open(file_path, "rb") as f:
-                    files = {"file": (file_path.name, f, mime)}
-                    data = {
-                        "model": "whisper-large-v3",
-                        "response_format": "verbose_json",
-                        "temperature": 0.0
-                    }
-                    res = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=120)
-                    if res.status_code == 200:
-                        return res.json().get("segments", [])
+                max_groq_attempts = min(4, max(2, groq_rotator.get_total_keys()))
+                for _ in range(max_groq_attempts):
+                    act_k = groq_rotator.get_next_key()
+                    if not act_k:
+                        break
+                    headers = {"Authorization": f"Bearer {act_k}"}
+                    mime = "audio/mp3" if file_path.suffix.lower() == ".mp3" else "audio/wav"
+                    try:
+                        with open(file_path, "rb") as f:
+                            files = {"file": (file_path.name, f, mime)}
+                            data = {
+                                "model": "whisper-large-v3",
+                                "response_format": "verbose_json",
+                                "temperature": 0.0
+                            }
+                            res = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=120)
+                            if res.status_code == 200:
+                                return res.json().get("segments", [])
+                            elif res.status_code == 429:
+                                groq_rotator.mark_rate_limited(act_k, cooldown_seconds=60.0, emit_fn=emit_progress, task_id=task_id)
+                                continue
+                            elif res.status_code in [400, 401]:
+                                groq_rotator.mark_invalid(act_k, emit_fn=emit_progress, task_id=task_id)
+                                continue
+                    except Exception:
+                        continue
                 return []
 
             # Check audio duration
@@ -382,8 +488,11 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
             emit_progress(task_id, 35, "Lấy phụ đề", f"Groq Whisper: {str(e)[:80]}. Chuyển sang Gemini...")
 
     # 2. Try Gemini 2.5 Flash Audio Transcription if gemini_key provided
-    if gemini_key and len(gemini_key.strip()) > 10 and not gemini_key.startswith("AIzaSyD-mock"):
-        emit_progress(task_id, 34, "Lấy phụ đề", "Đang nhận diện giọng nói và mốc thời gian qua Gemini 2.5 Flash Audio...")
+    gemini_audio_rotator = ApiKeyRotator(gemini_key, service_name="Gemini Audio", default_min_interval=3.0)
+    if gemini_audio_rotator.has_keys():
+        act_audio_key = gemini_audio_rotator.get_next_key()
+        masked_audio_k = gemini_audio_rotator.get_masked_key(act_audio_key)
+        emit_progress(task_id, 34, "Lấy phụ đề", f"Nhận diện giọng nói và mốc thời gian qua Gemini Audio [{masked_audio_k}]...")
         try:
             import requests, base64
             target_audio = audio_mp3 if audio_mp3.exists() else audio_wav
@@ -397,7 +506,7 @@ def step_extract_and_transcribe(task_id: int, video_file: Path, temp_dir: Path, 
                 "[{\"index\": 1, \"start\": 0.0, \"end\": 2.5, \"text\": \"câu nói gốc trong video\"}]\n"
                 "Nếu file âm thanh hoàn toàn không có lời thoại (chỉ có nhạc hoặc im lặng), trả về: []"
             )
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key.strip()}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={act_audio_key}"
             payload = {
                 "contents": [{
                     "parts": [
@@ -515,14 +624,18 @@ def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: 
     pattern = re.compile(r'\[(\d+)\]\s*(.+)')
     translated_map = {}
 
-    has_valid_gemini = gemini_key and len(gemini_key.strip()) > 10 and not gemini_key.startswith("AIzaSyD-mock")
+    gemini_rotator = ApiKeyRotator(gemini_key, service_name="Gemini", default_min_interval=3.0)
 
-    if has_valid_gemini:
+    if gemini_rotator.has_keys():
+        total_keys = gemini_rotator.get_total_keys()
         BATCH_SIZE = 40
         total_batches = int(math.ceil(len(subtitles) / BATCH_SIZE))
-        emit_progress(task_id, 45, "Dịch AI", f"Gửi {len(subtitles)} câu thoại lên Gemini 2.5 Flash ({total_batches} đợt dịch, thể loại: {genre})...")
+        if total_keys > 1:
+            emit_progress(task_id, 45, "Dịch AI", f"Khởi động Gemini với {total_keys} API Keys (Chia tải xoay tua Round-Robin & Tự động đổi key khi chạm giới hạn 429, thể loại: {genre})...")
+        else:
+            emit_progress(task_id, 45, "Dịch AI", f"Gửi {len(subtitles)} câu thoại lên Gemini 2.5 Flash ({total_batches} đợt dịch, 1 Key có điều tốc chống 429, thể loại: {genre})...")
 
-        models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
+        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
 
         for b_idx in range(total_batches):
             batch = subtitles[b_idx * BATCH_SIZE : (b_idx + 1) * BATCH_SIZE]
@@ -535,29 +648,47 @@ def step_gemini_translation(task_id: int, subtitles: list, genre: str, quality: 
                 f"Chỉ trả về các dòng dạng: [index] Bản dịch tiếng Việt"
             )
             pct = 45 + int(15 * ((b_idx + 1) / total_batches))
-            emit_progress(task_id, pct, "Dịch AI", f"Gemini dịch đợt {b_idx + 1}/{total_batches} (câu {batch[0]['index']}-{batch[-1]['index']}/{len(subtitles)})...")
 
             batch_success = False
             for model_name in models_to_try:
                 if batch_success:
                     break
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_key.strip()}"
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-                for retry_i in range(2):
+                max_attempts = min(4, max(2, total_keys))
+                for attempt_i in range(max_attempts):
+                    active_key = gemini_rotator.get_next_key(emit_fn=emit_progress, task_id=task_id)
+                    if not active_key:
+                        break
+
+                    masked_k = gemini_rotator.get_masked_key(active_key)
+                    emit_progress(task_id, pct, "Dịch AI", f"Gemini dịch đợt {b_idx + 1}/{total_batches} (câu {batch[0]['index']}-{batch[-1]['index']}/{len(subtitles)}) qua Key [{masked_k}] trên {model_name}...")
+
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={active_key}"
+                    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
                     try:
                         res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
                         if res.status_code == 200:
                             resp_json = res.json()
-                            text_out = resp_json['candidates'][0]['content']['parts'][0]['text']
-                            for line in text_out.split('\n'):
-                                m = pattern.search(line.strip())
-                                if m:
-                                    translated_map[int(m.group(1))] = m.group(2).strip()
-                            batch_success = True
-                            break
-                        elif res.status_code in [503, 429]:
-                            time.sleep(1.5 * (retry_i + 1))
+                            candidates = resp_json.get('candidates', [])
+                            if candidates and 'content' in candidates[0] and 'parts' in candidates[0]['content']:
+                                text_out = candidates[0]['content']['parts'][0]['text']
+                                for line in text_out.split('\n'):
+                                    m = pattern.search(line.strip())
+                                    if m:
+                                        translated_map[int(m.group(1))] = m.group(2).strip()
+                                batch_success = True
+                                break
+                        elif res.status_code == 429:
+                            gemini_rotator.mark_rate_limited(active_key, cooldown_seconds=60.0, emit_fn=emit_progress, task_id=task_id)
+                            # Retry immediately with next rotated key
+                            continue
+                        elif res.status_code in [400, 403]:
+                            gemini_rotator.mark_invalid(active_key, emit_fn=emit_progress, task_id=task_id)
+                            continue
+                        elif res.status_code in [500, 503]:
+                            time.sleep(1.0)
+                            continue
                         else:
                             break
                     except Exception:

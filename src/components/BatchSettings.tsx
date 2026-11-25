@@ -366,9 +366,14 @@ export const BatchSettingsForm: React.FC = () => {
             <Settings className="w-3.5 h-3.5 text-amber-400" />
             <span>Cấu Hình API Dịch</span>
           </div>
-          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${geminiApiKey ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40' : 'bg-amber-950/80 text-amber-400 border border-amber-500/40'}`}>
-            {geminiApiKey ? 'Gemini 2.5 Active' : 'Chưa nhập Key'}
-          </span>
+          {(() => {
+            const gCount = (geminiApiKey || '').split(/[\r\n,;]+/).map(k => k.trim()).filter(k => k.length > 10).length;
+            return (
+              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${gCount > 0 ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40' : 'bg-amber-950/80 text-amber-400 border border-amber-500/40'}`}>
+                {gCount > 1 ? `Gemini Active (${gCount} Keys)` : gCount === 1 ? 'Gemini 2.5 Active' : 'Chưa nhập Key'}
+              </span>
+            );
+          })()}
         </button>
       </div>
 
