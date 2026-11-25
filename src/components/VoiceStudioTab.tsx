@@ -15,10 +15,11 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
+import { BRIDGE_URL } from '../services/tauriBridge';
 import type { SubtitleLine } from '../types';
 
 export const VoiceStudioTab: React.FC = () => {
-  const { tasks, currentVideoId, setCurrentVideoId, outputDir, addLog, freeVoices } = useStudioStore();
+  const { tasks, currentVideoId, setCurrentVideoId, outputDir, addLog, freeVoices, settings } = useStudioStore();
   
   const currentTask = tasks.find((t) => t.id === currentVideoId) || tasks[0];
 
@@ -42,7 +43,7 @@ export const VoiceStudioTab: React.FC = () => {
   const loadSubtitlesFromBackend = async (taskId: number) => {
     setIsLoadingSubs(true);
     try {
-      const res = await fetch(`http://127.0.0.1:5678/api/subtitles?task_id=${taskId}`);
+      const res = await fetch(`${BRIDGE_URL}/api/subtitles?task_id=${taskId}`);
       if (res.ok) {
         const data = await res.json();
         if (data.status === 'success' && Array.isArray(data.subtitles) && data.subtitles.length > 0) {
@@ -121,7 +122,7 @@ export const VoiceStudioTab: React.FC = () => {
       setLoadingAudioIndex(index);
       addLog(`[Voice Studio] Đang tổng hợp giọng nói cho câu #${index}...`, 'info');
 
-      const res = await fetch('http://127.0.0.1:5678/api/preview_voice', {
+      const res = await fetch(`${BRIDGE_URL}/api/preview_voice`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -164,7 +165,7 @@ export const VoiceStudioTab: React.FC = () => {
     if (!currentTask) return;
     setIsSaving(true);
     try {
-      const res = await fetch('http://127.0.0.1:5678/api/save_subtitles', {
+      const res = await fetch(`${BRIDGE_URL}/api/save_subtitles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -199,6 +200,22 @@ export const VoiceStudioTab: React.FC = () => {
   };
 
   const handleExportAss = () => {
+    const hexToAss = (hex?: string, def = '&H00FFFFFF&') => {
+      if (!hex) return def;
+      const clean = hex.replace('#', '').trim();
+      if (clean.length === 6) {
+        const r = clean.slice(0, 2);
+        const g = clean.slice(2, 4);
+        const b = clean.slice(4, 6);
+        return `&H00${b}${g}${r}&`;
+      }
+      return def;
+    };
+
+    const primaryColor = hexToAss(settings.textColor, '&H00FFFFFF&');
+    const outlineColor = hexToAss(settings.strokeColor, '&H00000000&');
+    const fSize = settings.fontSize || 50;
+
     let assContent = `[Script Info]
 Title: Studio MMO Subtitles
 ScriptType: v4.00+
@@ -209,7 +226,7 @@ PlayResY: 1080
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,52,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,2,2,10,10,65,1
+Style: Default,Arial,${fSize},${primaryColor},&H000000FF,${outlineColor},&H80000000,1,0,0,0,100,100,0,0,1,3,2,2,10,10,65,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -243,7 +260,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     setIsMergingAudio(true);
     addLog(`Đang gửi yêu cầu ghép toàn bộ âm thanh ra thư mục ${outputDir}...`, 'info');
     try {
-      const res = await fetch('http://127.0.0.1:5678/api/merge_full_audio', {
+      const res = await fetch(`${BRIDGE_URL}/api/merge_full_audio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

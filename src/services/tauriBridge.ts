@@ -1,6 +1,8 @@
 import type { TaskItem, BatchSettings, BoundingBox, StudioProfile } from '../types';
 
-const BRIDGE_URL = 'http://127.0.0.1:5678';
+export const BRIDGE_URL = 
+  (typeof window !== 'undefined' && (window as any).__BRIDGE_URL__) ||
+  `http://${(typeof window !== 'undefined' && window.location.hostname) || '127.0.0.1'}:5678`;
 
 // Detect whether running in Tauri desktop environment
 export const isTauri = (): boolean => {

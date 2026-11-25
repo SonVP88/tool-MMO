@@ -220,6 +220,14 @@ def seconds_to_ass_time(seconds: float) -> str:
         cs = 99
     return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
 
+def get_system_font_path() -> str:
+    windir = os.environ.get("WINDIR", "C:\\Windows")
+    for fname in ["arial.ttf", "segoeui.ttf", "tahoma.ttf", "consola.ttf"]:
+        p = Path(windir) / "Fonts" / fname
+        if p.exists():
+            return str(p).replace("\\", "/").replace(":", "\\:")
+    return ""
+
 # ==================== STEP 1: DOWNLOAD / INPUT ====================
 def step_download_or_copy(task_id: int, source: str, temp_dir: Path, cookie_data: str = None, preferred_name: str = "") -> tuple:
     source_clean = source.strip()
@@ -1190,20 +1198,32 @@ def step_produce_audio_novel(
         "Giọng Trầm Kể Chuyện (vi-VN)": "vi-VN-NamMinhNeural",
         "Chị Google": "vi-VN-HoaiMyNeural",
     }
-    v_code = voice if str(voice).endswith("Neural") else voice_code_map.get(voice, "vi-VN-NamMinhNeural")
+    v_code = voice if "Neural" in str(voice) else voice_code_map.get(voice, "vi-VN-NamMinhNeural")
 
     emit_progress(task_id, 35, "Lồng tiếng AI", f"Tổng hợp giọng đọc truyền cảm ({voice})...")
     rate_str = f"+{int((speed - 1.0) * 100)}%" if speed >= 1.0 else f"-{int((1.0 - speed) * 100)}%"
     voice_mp3 = temp_dir / f"story_voice_{task_id}.mp3"
 
-    cmd_tts = [
-        sys.executable, "-m", "edge_tts",
-        "--voice", v_code,
-        "--rate", rate_str,
-        "--text", story_content,
-        "--write-media", str(voice_mp3)
-    ]
-    subprocess.run(cmd_tts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    # Use direct Python edge_tts Communicate to prevent Windows 32KB command line limit on long novels!
+    try:
+        import asyncio, edge_tts
+        async def _synth_novel():
+            communicate = edge_tts.Communicate(story_content, v_code, rate=rate_str)
+            await communicate.save(str(voice_mp3))
+        asyncio.run(_synth_novel())
+    except Exception:
+        # Fallback to file-based edge_tts execution
+        txt_tmp = temp_dir / "tts_input.txt"
+        with open(txt_tmp, "w", encoding="utf-8") as ftmp:
+            ftmp.write(story_content)
+        cmd_tts = [
+            sys.executable, "-m", "edge_tts",
+            "--voice", v_code,
+            "--rate", rate_str,
+            "--file", str(txt_tmp),
+            "--write-media", str(voice_mp3)
+        ]
+        subprocess.run(cmd_tts, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
     # Probe duration
     ffmpeg_exe = get_ffmpeg_path()
@@ -1213,14 +1233,6 @@ def step_produce_audio_novel(
     total_sec = 60.0
     if m:
         total_sec = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) + 1.0
-
-def get_system_font_path() -> str:
-    windir = os.environ.get("WINDIR", "C:\\Windows")
-    for fname in ["arial.ttf", "segoeui.ttf", "tahoma.ttf", "consola.ttf"]:
-        p = Path(windir) / "Fonts" / fname
-        if p.exists():
-            return str(p).replace("\\", "/").replace(":", "\\:")
-    return ""
 
     emit_progress(task_id, 65, "Tạo BGM & Background", f"Trộn nhạc nền du dương ({int(total_sec)}s) và thiết kế khung hình...")
 

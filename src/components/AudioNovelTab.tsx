@@ -8,6 +8,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
+import { BRIDGE_URL } from '../services/tauriBridge';
 
 export const AudioNovelTab: React.FC = () => {
   const { addLog, outputDir, setStudioMode, freeVoices } = useStudioStore();
@@ -50,7 +51,7 @@ export const AudioNovelTab: React.FC = () => {
     addLog(`Đang gửi yêu cầu sản xuất Video Truyện Audio: "${cleanTitle}"...`, 'info');
 
     try {
-      const res = await fetch('http://127.0.0.1:5678/api/produce_audio_novel', {
+      const res = await fetch(`${BRIDGE_URL}/api/produce_audio_novel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

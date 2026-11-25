@@ -33,7 +33,8 @@ import {
   apiAddLocalPath,
   apiGetVoices,
   type VoiceOption,
-  listenTauriEvent
+  listenTauriEvent,
+  BRIDGE_URL
 } from '../services/tauriBridge';
 
 interface StudioState {
@@ -268,7 +269,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
     // 1b. Load settings from backend
     try {
-      const res = await fetch('http://127.0.0.1:5678/api/settings');
+      const res = await fetch(`${BRIDGE_URL}/api/settings`);
       if (res.ok) {
         const cfg = await res.json();
         if (cfg) {
@@ -648,7 +649,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setCharacters: (chars) => {
     try {
       localStorage.setItem('studio_characters', JSON.stringify(chars));
-      fetch('http://127.0.0.1:5678/api/settings', {
+      fetch(`${BRIDGE_URL}/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ characters: chars }),

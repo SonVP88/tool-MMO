@@ -22,17 +22,32 @@ def get_ffmpeg_exe():
     except Exception:
         return "ffmpeg"
 
+def get_video_duration(video_path: str, ffmpeg: str) -> float:
+    try:
+        res = subprocess.run([ffmpeg, "-i", str(video_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore")
+        import re
+        m = re.search(r'Duration:\s*(\d+):(\d+):([\d.]+)', res.stderr or "")
+        if m:
+            return max(1.0, int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)))
+    except Exception:
+        pass
+    return 30.0
+
 def extract_sample_frames(video_path: str, temp_dir: Path, num_frames: int = 4) -> list:
     temp_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg = get_ffmpeg_exe()
     frames = []
 
-    # Get sample timestamps at 25%, 40%, 60%, 75%
-    for idx, pct in enumerate([0.25, 0.40, 0.60, 0.75]):
+    total_dur = get_video_duration(video_path, ffmpeg)
+
+    # Get sample timestamps dynamically across video duration at 20%, 40%, 60%, 80%
+    sample_ratios = [0.20, 0.40, 0.60, 0.80]
+    for idx, pct in enumerate(sample_ratios):
         out_frame = temp_dir / f"frame_{idx}.png"
+        sample_time = max(0.5, min(total_dur - 0.5, pct * total_dur))
         cmd = [
             ffmpeg, "-y",
-            "-ss", f"{pct * 10.0:.2f}",
+            "-ss", f"{sample_time:.2f}",
             "-i", str(video_path),
             "-vframes", "1",
             "-q:v", "2",

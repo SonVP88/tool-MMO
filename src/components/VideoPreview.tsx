@@ -6,7 +6,7 @@ import {
   Film
 } from 'lucide-react';
 import { useStudioStore } from '../store/useStudioStore';
-import { apiDetectSub } from '../services/tauriBridge';
+import { apiDetectSub, BRIDGE_URL } from '../services/tauriBridge';
 import type { BoundingBox } from '../types';
 
 export const VideoPreview: React.FC = () => {
@@ -34,8 +34,8 @@ export const VideoPreview: React.FC = () => {
     : (currentTask?.source || '');
 
   const videoSrc = targetVideoPath 
-    ? `http://127.0.0.1:5678/api/video_stream?path=${encodeURIComponent(targetVideoPath)}` 
-    : 'http://127.0.0.1:5678/api/video_stream';
+    ? `${BRIDGE_URL}/api/video_stream?path=${encodeURIComponent(targetVideoPath)}` 
+    : `${BRIDGE_URL}/api/video_stream`;
 
   // Drag & Resize State
   const [activeDrag, setActiveDrag] = useState<{

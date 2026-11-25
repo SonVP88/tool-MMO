@@ -48,9 +48,13 @@ def probe_video_metadata(video_path: Path) -> tuple:
     try:
         ffmpeg_exe = shutil.which("ffmpeg")
         if not ffmpeg_exe:
-            local_bin = Path(__file__).resolve().parent.parent / "bin" / "ffmpeg.exe"
-            if local_bin.exists():
-                ffmpeg_exe = str(local_bin)
+            for cand in [
+                Path(__file__).resolve().parent.parent / "bin" / "ffmpeg" / "ffmpeg.exe",
+                Path(__file__).resolve().parent.parent / "bin" / "ffmpeg.exe"
+            ]:
+                if cand.exists():
+                    ffmpeg_exe = str(cand)
+                    break
         if not ffmpeg_exe:
             try:
                 import imageio_ffmpeg
