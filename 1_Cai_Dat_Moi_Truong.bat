@@ -11,7 +11,7 @@ echo.
 
 set "PYTHON_CMD="
 call :find_python
-if not "%PYTHON_CMD%"=="" goto :py_ok
+if defined PYTHON_CMD goto :py_ok
 
 echo [*] May tinh chua cai dat Python!
 echo [*] Dang tu dong tai bo cai Python 3.12.8 chinh chu tu python.org...
@@ -24,24 +24,39 @@ if exist "%PY_INSTALLER%" del /f /q "%PY_INSTALLER%" >nul 2>nul
 
 where curl.exe >nul 2>nul
 if not errorlevel 1 (
-    curl.exe -L --progress-bar -o "%PY_INSTALLER%" "%PY_URL%"
+    curl.exe -fL --progress-bar -o "%PY_INSTALLER%" "%PY_URL%"
 ) else (
     powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_INSTALLER%'"
 )
 
-if not exist "%PY_INSTALLER%" (
-    echo [!] Khong the tai bo cai Python. Vui long kiem tra mang hoac cai thu cong tai https://www.python.org/
-    pause
-    exit /b 1
+set "PY_SIZE=0"
+if exist "%PY_INSTALLER%" (
+    for %%A in ("%PY_INSTALLER%") do set "PY_SIZE=%%~zA"
+)
+if %PY_SIZE% LSS 10000000 (
+    echo [!] File bo cai Python tai ve bi loi hoac khong day du.
+    where winget >nul 2>nul
+    if not errorlevel 1 (
+        winget install -e --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
+    )
+    goto :check_after_install
 )
 
 echo.
-echo [*] Dang tu dong cai dat Python 3.12 (khong can quyen Admin, tu dong them vao PATH)...
-"%PY_INSTALLER%" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0 Include_pip=1
-del /f /q "%PY_INSTALLER%" >nul 2>nul
+echo [*] Dang cai dat Python 3.12 (Vui long khong tat cua so nay, dang cho cai dat hoan tat)...
+start /wait "" "%PY_INSTALLER%" /quiet InstallAllUsers=0 InstallLauncherAllUsers=0 Include_launcher=0 PrependPath=1 Include_test=0 Include_pip=1
 
 call :find_python
-if "%PYTHON_CMD%"=="" (
+if not defined PYTHON_CMD (
+    echo [*] Che do cai ngam bi han che, dang chuyen sang cai dat hien thanh tien trinh...
+    start /wait "" "%PY_INSTALLER%" /passive InstallAllUsers=0 InstallLauncherAllUsers=0 Include_launcher=0 PrependPath=1 Include_test=0 Include_pip=1
+)
+
+if exist "%PY_INSTALLER%" del /f /q "%PY_INSTALLER%" >nul 2>nul
+
+:check_after_install
+call :find_python
+if not defined PYTHON_CMD (
     echo [!] Cai dat Python chua thanh cong. Vui long cai thu cong tai https://www.python.org/
     pause
     exit /b 1
@@ -81,6 +96,10 @@ if not errorlevel 1 (
 py -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >nul 2>nul
 if not errorlevel 1 (
     set "PYTHON_CMD=py"
+    exit /b 0
+)
+if exist "%LocalAppData%\Programs\Python\Python312\python.exe" (
+    set "PYTHON_CMD="%LocalAppData%\Programs\Python\Python312\python.exe""
     exit /b 0
 )
 for /d %%P in ("%LocalAppData%\Programs\Python\Python*") do (
